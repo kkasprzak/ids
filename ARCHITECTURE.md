@@ -97,7 +97,7 @@ Every I/O concern is a port. Domain code depends only on the port; adapters prov
 | `inputs/xtb_exports/` | User | XLSX files; gitignored. |
 | `outputs/reports/weekly/<date>_weekly.md` | System | Regenerated deterministically each run. |
 | `outputs/reports/monthly/<period>/` | System | Regenerated deterministically. |
-| `outputs/snapshots/<as_of>.jsonl` | System | One file per as_of_date; regenerated deterministically. Versioned in Git. |
+| `outputs/snapshots/<as_of>.jsonl` | System | One file per as_of_date; regenerated deterministically. Gitignored by default — local private data. |
 | `outputs/position_log/<date>_<symbol>.md` (frontmatter) | System | Updated on every run. |
 | `outputs/position_log/<date>_<symbol>.md` (body) | User | System never overwrites user-written content. |
 
@@ -125,7 +125,7 @@ Running a report command twice for the same period produces the same output, ass
 
 ### Snapshot store
 
-Every report run persists the parsed `PortfolioSnapshot` to `outputs/snapshots/<as_of>.jsonl` before rendering. This is the substrate for all time-series views (equity curve, drawdown, Discipline Twin). The store is git-versioned, one file per `as_of_date`, deterministically serialized.
+Every report run persists the parsed `PortfolioSnapshot` to `outputs/snapshots/<as_of>.jsonl` before rendering. This is the substrate for all time-series views (equity curve, drawdown, Discipline Twin). The store is local-only by default — `outputs/` is gitignored to keep personal financial data private. One file per `as_of_date`, deterministically serialized. An owner who wants to version snapshots privately should do so in a separate private repo, not the public codebase.
 
 ## CLI structure
 
