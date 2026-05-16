@@ -1,0 +1,29 @@
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Personal data — never versioned in public repo
+# Generated outputs (portfolio snapshots, reports, position log rationale)
+outputs/
+
+# User inputs (broker exports, instrument metadata, config, strategy docs)
+inputs/xtb_exports/
+inputs/instruments.yaml
+inputs/config.yaml
+inputs/strategy/
+
+# Local environment / secrets
+.env
+.env.*
+.envrc

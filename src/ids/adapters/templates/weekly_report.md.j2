@@ -1,0 +1,25 @@
+# Weekly portfolio snapshot — as of {{ view.as_of_date.isoformat() }}
+
+> Generated: {{ view.generated_at.strftime("%Y-%m-%d %H:%M") }} Europe/Warsaw
+> Source: {{ view.source_id }}
+
+## Portfolio summary
+
+| Metric          | Value          |
+| --------------- | -------------: |
+| Equity          | {{ view.equity_pln | pln }}  |
+| Cash            | {{ view.cash_pln | pln }}  |
+| Cash %          | {{ view.cash_pct | pct }}  |
+| Open positions  | {{ view.open_positions_count }} |
+
+## Open positions
+
+{% if view.rows %}
+| Symbol       |  Open date | Days | Open price | Market price |  P&L (PLN) |  P&L % |
+| ------------ | ---------: | ---: | ---------: | -----------: | ---------: | -----: |
+{% for row in view.rows -%}
+| {{ row.symbol }} | {{ row.open_date.isoformat() }} | {{ row.days_held }} | {{ row.open_price | price }} | {{ row.market_price | price }} | {{ row.pnl_pln | pln_signed }} | {{ row.pnl_pct | pct_signed }} |
+{% endfor %}
+{% else %}
+_No open positions._
+{% endif %}
