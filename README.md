@@ -1,0 +1,49 @@
+# Investment Decision System (IDS)
+
+Spec-driven, hexagonal Python toolkit for analyzing XTB brokerage portfolios — generates daily snapshots, compliance alerts, and investment discipline reports.
+
+## What it is
+
+IDS is a personal-use automation suite for an IKZE portfolio held at XTB. It ingests XTB account XLSX exports and produces weekly portfolio reviews, monthly performance evaluations, and pre-purchase compliance checks against a user-defined trading strategy. The product is a single-user tool: design decisions favour clarity and discipline for one rigorous user over multi-user discoverability.
+
+See [`PRD.md`](PRD.md) for the full product brief and [`specs/`](specs/) for individual feature specifications (IDS01–IDS12).
+
+## Quick start
+
+```bash
+uv sync                          # install dependencies (incl. dev group)
+export IDS_IKZE_ACCOUNT_ID=...   # your XTB IKZE account ID (or use --ikze-account-id)
+uv run ids report weekly         # generate the weekly snapshot from inputs/xtb_exports/
+```
+
+Place XTB XLSX exports under `inputs/xtb_exports/` (gitignored). Reports and snapshots land under `outputs/` (also gitignored — your data stays local).
+
+## Development
+
+```bash
+uv run pytest -n auto       # run tests in parallel
+uv run ruff check .         # lint
+uv run ruff format .        # format
+uv run pyright              # type-check (strict on src/)
+uv run pre-commit install   # enable git hooks
+```
+
+## Architecture
+
+Hexagonal (ports & adapters), three layers under `src/ids/`:
+
+- `domain/` — pure business logic; no I/O library imports
+- `adapters/` — concrete I/O (XLSX, JSONL, YAML, Markdown, PNG)
+- `cli/` — thin `typer` orchestration
+
+`outputs/snapshots/<as_of>.jsonl` is the canonical time-series substrate; reports are views over snapshot history.
+
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design record, [`TECH_STACK.md`](TECH_STACK.md) for the library list, and [`TEST_STRATEGY.md`](TEST_STRATEGY.md) for the testing approach.
+
+## Task tracking
+
+Issue tracking uses [beads](https://github.com/gastownhall/beads) with the Dolt database synced to a **separate private remote** (`.beads/` is gitignored in this repo). The public repo holds code; backlog and decision history live elsewhere by design.
+
+## License
+
+Personal project. No license granted at this time — code is published for reference and learning.
