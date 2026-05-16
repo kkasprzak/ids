@@ -1,3 +1,7 @@
+# Fully synthetic fixture — no real brokerage data.
+# Account 99999999, position IDs 1000000001/2, and all monetary values are
+# invented. Regenerate by running this script and committing the result after
+# reviewing the diff. Never replace with a real XTB export.
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
