@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Protocol
 
 from ids.domain.errors import IDSError
@@ -12,4 +11,4 @@ class ReportWriterError(IDSError):
 class ReportWriter(Protocol):
     """Renders a view-model into a report file at the given path."""
 
-    def write_weekly(self, view: WeeklySnapshotView, output_path: Path) -> None: ...
+    def write_weekly(self, view: WeeklySnapshotView, output_path: str) -> None: ...

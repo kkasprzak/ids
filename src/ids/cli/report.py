@@ -76,7 +76,7 @@ def weekly(
         view = build_weekly_snapshot(snapshot, now=_now_warsaw())
         writer = MarkdownReportWriter()
         report_path = DEFAULT_REPORTS_DIR / f"{snapshot.as_of_date.isoformat()}_weekly.md"
-        writer.write_weekly(view, report_path)
+        writer.write_weekly(view, str(report_path))
         console.print(f"[green]✓[/green] Wrote {report_path}")
 
     except IDSError as error:

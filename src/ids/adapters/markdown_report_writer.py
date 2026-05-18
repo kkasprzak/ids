@@ -34,8 +34,9 @@ class MarkdownReportWriter(ReportWriter):
         filters["pct_signed"] = format_pct_signed
         filters["price"] = format_price
 
-    def write_weekly(self, view: WeeklySnapshotView, output_path: Path) -> None:
+    def write_weekly(self, view: WeeklySnapshotView, output_path: str) -> None:
         template = self._env.get_template("weekly_report.md.j2")
         rendered = template.render(view=view)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(rendered, encoding="utf-8")
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(rendered, encoding="utf-8")

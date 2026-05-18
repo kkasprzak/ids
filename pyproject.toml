@@ -46,12 +46,38 @@ pythonVersion = "3.12"
 
 [tool.importlinter]
 root_packages = ["ids"]
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Domain must not import adapters or CLI"
 type = "forbidden"
 source_modules = ["ids.domain"]
 forbidden_modules = ["ids.adapters", "ids.cli"]
+
+[[tool.importlinter.contracts]]
+name = "Domain must not import I/O libraries"
+type = "forbidden"
+source_modules = ["ids.domain"]
+forbidden_modules = [
+    # stdlib I/O
+    "pathlib",
+    "os",
+    "io",
+    "json",
+    "csv",
+    "shutil",
+    "subprocess",
+    "sqlite3",
+    # third-party I/O (adapter dependencies)
+    "pandas",
+    "openpyxl",
+    "yaml",
+    "frontmatter",
+    "jinja2",
+    "matplotlib",
+    "typer",
+    "rich",
+]
 
 [[tool.importlinter.contracts]]
 name = "Adapters must not import CLI"
