@@ -237,7 +237,7 @@ def test_missing_required_columns_raises_malformed(tmp_path: Path) -> None:
     sheet.cell(row=7, column=2, value="Symbol")
     workbook.save(path)
 
-    with pytest.raises(PortfolioMalformedError, match="labels"):
+    with pytest.raises(PortfolioMalformedError, match="required columns"):
         _loader(input_dir).load_latest()
 
 
@@ -372,3 +372,56 @@ def test_export_datetime_beyond_original_row_6_is_found(tmp_path: Path) -> None:
     )
     snapshot = _loader(tmp_path / "inputs").load_latest()
     assert snapshot.account.export_datetime.date() == date(2026, 5, 2)
+
+
+def _make_xlsx_with_custom_headers(path: Path, headers: list[str]) -> None:
+    """Write a workbook with the given header row instead of the standard one."""
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[{"Symbol": "TEST"}],
+    )
+    wb = load_workbook(path)
+    ws = wb["OPEN POSITION 02052026"]
+    for col, name in enumerate(headers, start=1):
+        ws.cell(row=7, column=col, value=name)
+    wb.save(path)
+
+
+def test_column_labels_with_extra_whitespace_are_matched(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    padded = [f"  {h}  " if h else h for h in _HEADER]
+    _make_xlsx_with_custom_headers(path, padded)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.positions[0].symbol == "TEST"
+
+
+def test_column_labels_with_different_case_are_matched(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    uppercased = [h.upper() for h in _HEADER]
+    _make_xlsx_with_custom_headers(path, uppercased)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.positions[0].symbol == "TEST"
+
+
+def test_gross_pl_ampersand_alias_is_accepted(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    alt_headers = [h if h != "Gross P/L" else "Gross P&L" for h in _HEADER]
+    _make_xlsx_with_custom_headers(path, alt_headers)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.positions[0].gross_pl_pln == Decimal("0")
+
+
+def test_missing_required_logical_field_names_it_in_error(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    # Remove "Gross P/L" entirely from the header
+    stripped = [h if h != "Gross P/L" else "" for h in _HEADER]
+    _make_xlsx_with_custom_headers(path, stripped)
+
+    with pytest.raises(PortfolioMalformedError, match="gross_pl"):
+        _loader(tmp_path / "inputs").load_latest()

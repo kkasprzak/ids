@@ -21,23 +21,36 @@ from ids.domain.timezones import WARSAW
 log = logging.getLogger(__name__)
 
 _OPEN_SHEET_PREFIX = "OPEN POSITION "
-_REQUIRED_COLUMNS = (
-    "Position",
-    "Symbol",
-    "Type",
-    "Volume",
-    "Open time",
-    "Open price",
-    "Market price",
-    "Purchase value",
-    "SL",
-    "Gross P/L",
-)
+
+# Logical field → accepted label aliases. Normalized before matching (strip + casefold).
+# All XTB adapter complexity stays here; domain models never see these strings.
+_POSITION_COLUMN_SCHEMA: dict[str, frozenset[str]] = {
+    "position_id":     frozenset({"Position"}),
+    "symbol":          frozenset({"Symbol"}),
+    "type":            frozenset({"Type"}),
+    "volume":          frozenset({"Volume"}),
+    "open_time":       frozenset({"Open time"}),
+    "open_price":      frozenset({"Open price"}),
+    "market_price":    frozenset({"Market price"}),
+    "purchase_value":  frozenset({"Purchase value"}),
+    "sl":              frozenset({"SL"}),
+    "gross_pl":        frozenset({"Gross P/L", "Gross P&L"}),
+}
+_ACCOUNT_COLUMN_SCHEMA: dict[str, frozenset[str]] = {
+    "balance": frozenset({"Balance"}),
+    "equity":  frozenset({"Equity"}),
+}
+
 # Bounded scan caps: high enough to survive XTB layout changes, low enough to
 # fail fast on corrupted or unrelated workbooks. Not domain rules.
 _EXPORT_DATETIME_SCAN_ROWS = 15
 _ACCOUNT_HEADER_SCAN_ROWS = 15
 _POSITION_HEADER_SCAN_ROWS = 25
+
+
+def _normalize_label(label: str) -> str:
+    """Strip, collapse internal whitespace, and casefold for alias matching."""
+    return " ".join(label.split()).casefold()
 
 
 class XTBPortfolioLoader(PortfolioLoader):
@@ -158,9 +171,10 @@ class XTBPortfolioLoader(PortfolioLoader):
                 f"automatically. Ambiguous sheets: {semantic_matches}. "
                 f"All sheets: {workbook.sheetnames}"
             )
+        required_fields = sorted(_POSITION_COLUMN_SCHEMA.keys())
         raise PortfolioMalformedError(
             f"No sheet starting with `{_OPEN_SHEET_PREFIX}` found and no sheet contains "
-            f"the required open-position columns {sorted(_REQUIRED_COLUMNS)}. "
+            f"the required open-position fields {required_fields}. "
             f"Sheets: {workbook.sheetnames}"
         )
 
@@ -168,16 +182,22 @@ class XTBPortfolioLoader(PortfolioLoader):
     def _sheet_has_position_table(
         sheet: Worksheet, max_scan_rows: int = _POSITION_HEADER_SCAN_ROWS
     ) -> bool:
-        required = set(_REQUIRED_COLUMNS)
+        required_count = len(_POSITION_COLUMN_SCHEMA)
         for row in sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True):
-            present = {str(cell) for cell in row if isinstance(cell, str)}
-            if required.issubset(present):
+            present = {_normalize_label(str(cell)) for cell in row if isinstance(cell, str)}
+            # Count distinct logical fields covered (each field matches if any alias is present)
+            covered = sum(
+                1
+                for aliases in _POSITION_COLUMN_SCHEMA.values()
+                if any(_normalize_label(a) in present for a in aliases)
+            )
+            if covered == required_count:
                 return True
         return False
 
     def _parse_account_summary(self, sheet: Worksheet) -> AccountSummary:
         label_row_idx, label_columns = self._find_labelled_row(
-            sheet, required={"Balance", "Equity"}, max_scan_rows=_ACCOUNT_HEADER_SCAN_ROWS
+            sheet, schema=_ACCOUNT_COLUMN_SCHEMA, max_scan_rows=_ACCOUNT_HEADER_SCAN_ROWS
         )
         value_row = next(
             sheet.iter_rows(
@@ -186,54 +206,76 @@ class XTBPortfolioLoader(PortfolioLoader):
                 values_only=True,
             )
         )
-        balance = self._cell_to_decimal(value_row[label_columns["Balance"]])
-        equity = self._cell_to_decimal(value_row[label_columns["Equity"]])
+        balance = self._cell_to_decimal(value_row[label_columns["balance"]])
+        equity = self._cell_to_decimal(value_row[label_columns["equity"]])
         export_dt = self._find_export_datetime(sheet)
         return AccountSummary(balance_pln=balance, equity_pln=equity, export_datetime=export_dt)
 
     def _parse_positions(self, sheet: Worksheet) -> list[Position]:
         header_row_idx, columns = self._find_labelled_row(
-            sheet, required=set(_REQUIRED_COLUMNS), max_scan_rows=_POSITION_HEADER_SCAN_ROWS
+            sheet, schema=_POSITION_COLUMN_SCHEMA, max_scan_rows=_POSITION_HEADER_SCAN_ROWS
         )
 
         positions: list[Position] = []
         for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
-            first = row[columns["Position"]] if columns["Position"] < len(row) else None
+            first = row[columns["position_id"]] if columns["position_id"] < len(row) else None
             if first is None:
                 continue
-            if first == "Total":
+            if not isinstance(first, (int, float)):
                 break
             positions.append(self._row_to_position(row, columns))
         return positions
 
     def _row_to_position(self, row: tuple[Any, ...], columns: dict[str, int]) -> Position:
-        sl_raw = row[columns["SL"]]
+        sl_raw = row[columns["sl"]]
         sl = None if sl_raw in (None, 0, 0.0) else self._cell_to_decimal(sl_raw)
         return Position(
-            id=int(row[columns["Position"]]),
-            symbol=str(row[columns["Symbol"]]),
-            type=PositionType(row[columns["Type"]]),
-            volume=self._cell_to_decimal(row[columns["Volume"]]),
-            open_time=self._naive_dt_to_warsaw(row[columns["Open time"]]),
-            open_price=self._cell_to_decimal(row[columns["Open price"]]),
-            market_price=self._cell_to_decimal(row[columns["Market price"]]),
-            purchase_value_pln=self._cell_to_decimal(row[columns["Purchase value"]]),
-            gross_pl_pln=self._cell_to_decimal(row[columns["Gross P/L"]]),
+            id=int(row[columns["position_id"]]),
+            symbol=str(row[columns["symbol"]]),
+            type=PositionType(row[columns["type"]]),
+            volume=self._cell_to_decimal(row[columns["volume"]]),
+            open_time=self._naive_dt_to_warsaw(row[columns["open_time"]]),
+            open_price=self._cell_to_decimal(row[columns["open_price"]]),
+            market_price=self._cell_to_decimal(row[columns["market_price"]]),
+            purchase_value_pln=self._cell_to_decimal(row[columns["purchase_value"]]),
+            gross_pl_pln=self._cell_to_decimal(row[columns["gross_pl"]]),
             sl=sl,
         )
 
     @staticmethod
     def _find_labelled_row(
-        sheet: Worksheet, *, required: set[str], max_scan_rows: int
+        sheet: Worksheet,
+        *,
+        schema: dict[str, frozenset[str]],
+        max_scan_rows: int,
     ) -> tuple[int, dict[str, int]]:
+        normalized_schema = {
+            logical: {_normalize_label(a) for a in aliases}
+            for logical, aliases in schema.items()
+        }
         for row_idx, row in enumerate(
             sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True), start=1
         ):
-            present = {str(cell): idx for idx, cell in enumerate(row) if isinstance(cell, str)}
-            if required.issubset(present):
-                return row_idx, present
+            norm_row = {
+                _normalize_label(str(cell)): idx
+                for idx, cell in enumerate(row)
+                if isinstance(cell, str)
+            }
+            columns: dict[str, int] = {}
+            for logical, norm_aliases in normalized_schema.items():
+                for alias in norm_aliases:
+                    if alias in norm_row:
+                        columns[logical] = norm_row[alias]
+                        break
+            if len(columns) == len(schema):
+                return row_idx, columns
+        required_desc = [
+            f"{logical} (accepts: {', '.join(sorted(aliases))})"
+            for logical, aliases in schema.items()
+        ]
         raise PortfolioMalformedError(
-            f"Could not find row containing labels {required} in first {max_scan_rows} rows."
+            f"Could not find row with all required columns in first {max_scan_rows} rows. "
+            f"Required: {'; '.join(required_desc)}"
         )
 
     @staticmethod
