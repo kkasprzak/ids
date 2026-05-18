@@ -133,13 +133,40 @@ class XTBPortfolioLoader(PortfolioLoader):
         )
 
     def _find_open_position_sheet(self, workbook: Workbook) -> Worksheet:
-        for name in workbook.sheetnames:
-            if name.startswith(_OPEN_SHEET_PREFIX):
-                return workbook[name]
+        prefix_matches = [n for n in workbook.sheetnames if n.startswith(_OPEN_SHEET_PREFIX)]
+        if prefix_matches:
+            return workbook[prefix_matches[0]]
+
+        semantic_matches = [
+            n for n in workbook.sheetnames if self._sheet_has_position_table(workbook[n])
+        ]
+        if len(semantic_matches) == 1:
+            log.info(
+                "No sheet matching prefix %r; using semantic fallback: %r",
+                _OPEN_SHEET_PREFIX,
+                semantic_matches[0],
+            )
+            return workbook[semantic_matches[0]]
+        if len(semantic_matches) > 1:
+            raise PortfolioMalformedError(
+                f"Multiple sheets contain the open-position table columns; cannot choose "
+                f"automatically. Ambiguous sheets: {semantic_matches}. "
+                f"All sheets: {workbook.sheetnames}"
+            )
         raise PortfolioMalformedError(
-            f"No sheet starting with `{_OPEN_SHEET_PREFIX}` found in workbook. "
+            f"No sheet starting with `{_OPEN_SHEET_PREFIX}` found and no sheet contains "
+            f"the required open-position columns {sorted(_REQUIRED_COLUMNS)}. "
             f"Sheets: {workbook.sheetnames}"
         )
+
+    @staticmethod
+    def _sheet_has_position_table(sheet: Worksheet, max_scan_rows: int = 25) -> bool:
+        required = set(_REQUIRED_COLUMNS)
+        for row in sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True):
+            present = {str(cell) for cell in row if isinstance(cell, str)}
+            if required.issubset(present):
+                return True
+        return False
 
     def _parse_account_summary(self, sheet: Worksheet) -> AccountSummary:
         label_row_idx, label_columns = self._find_labelled_row(

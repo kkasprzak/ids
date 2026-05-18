@@ -4,12 +4,12 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from ids.adapters.xtb_portfolio_loader import XTBPortfolioLoader
 from ids.domain.ports.portfolio import NoPortfolioAvailableError, PortfolioMalformedError
 from ids.domain.timezones import WARSAW
-from tests.adapters.conftest import make_xlsx
+from tests.adapters.conftest import _HEADER, make_xlsx
 
 pytestmark = pytest.mark.integration
 
@@ -174,6 +174,49 @@ def test_missing_open_position_sheet_raises_malformed(tmp_path: Path) -> None:
     workbook.save(path)
 
     with pytest.raises(PortfolioMalformedError, match="OPEN POSITION"):
+        _loader(input_dir).load_latest()
+
+
+def test_non_standard_sheet_name_loads_via_semantic_fallback(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("100.00"),
+        equity=Decimal("200.00"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[{"Symbol": "FALLBACK"}],
+    )
+    wb = load_workbook(path)
+    for ws in wb.worksheets:
+        if ws.title.startswith("OPEN POSITION"):
+            ws.title = "POZYCJE OTWARTE 02052026"
+    wb.save(path)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.positions[0].symbol == "FALLBACK"
+
+
+def test_multiple_sheets_with_position_table_raises_ambiguity(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[{"Symbol": "ONE"}],
+    )
+    wb = load_workbook(path)
+    for ws in wb.worksheets:
+        if ws.title.startswith("OPEN POSITION"):
+            ws.title = "TABLE A"
+    dup = wb.create_sheet("TABLE B")
+    for col, name in enumerate(_HEADER, start=1):
+        dup.cell(row=1, column=col, value=name)
+    wb.save(path)
+
+    with pytest.raises(PortfolioMalformedError, match="Ambiguous"):
         _loader(input_dir).load_latest()
 
 
