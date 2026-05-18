@@ -63,6 +63,7 @@ uv run pytest --cov=ids       # Run with coverage
 uv run ruff check .           # Lint
 uv run ruff format .          # Format
 uv run pyright                # Type-check (strict on src/)
+uv run lint-imports           # Architecture contracts (importlinter)
 uv run ids --help             # Run the CLI entrypoint
 ```
 

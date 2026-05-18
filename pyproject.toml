@@ -25,6 +25,7 @@ dev = [
     "ruff>=0.6",
     "pyright>=1.1.380",
     "pre-commit>=3.7",
+    "import-linter>=2.11",
 ]
 
 [build-system]
@@ -42,6 +43,27 @@ select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "PL"]
 include = ["src", "tests"]
 strict = ["src"]
 pythonVersion = "3.12"
+
+[tool.importlinter]
+root_packages = ["ids"]
+
+[[tool.importlinter.contracts]]
+name = "Domain must not import adapters or CLI"
+type = "forbidden"
+source_modules = ["ids.domain"]
+forbidden_modules = ["ids.adapters", "ids.cli"]
+
+[[tool.importlinter.contracts]]
+name = "Adapters must not import CLI"
+type = "forbidden"
+source_modules = ["ids.adapters"]
+forbidden_modules = ["ids.cli"]
+
+[[tool.importlinter.contracts]]
+name = "Hexagonal layers flow top-down: CLI -> adapters -> domain"
+type = "layers"
+layers = ["ids.cli", "ids.adapters", "ids.domain"]
+exhaustive = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
