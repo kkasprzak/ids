@@ -70,7 +70,7 @@ Pre-commit hooks are configured; install with `uv run pre-commit install`.
 
 ## Architecture Overview
 
-**Investment Decision System (IDS)** — personal IKZE portfolio automation CLI. Reads XTB XLSX exports, persists portfolio snapshots, evaluates compliance rules, and renders Markdown reports.
+**Investment Decision System (IDS)** — IKZE portfolio automation CLI. Reads XTB XLSX exports, persists portfolio snapshots, evaluates compliance rules, and renders Markdown reports.
 
 Hexagonal (ports & adapters), three layers under `src/ids/`:
 

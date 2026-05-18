@@ -1,7 +1,7 @@
 [project]
 name = "ids"
 version = "0.1.0"
-description = "Investment Decision System - personal IKZE automation"
+description = "Investment Decision System - IKZE automation"
 requires-python = ">=3.12"
 dependencies = [
     "typer>=0.12",
