@@ -33,6 +33,11 @@ _REQUIRED_COLUMNS = (
     "SL",
     "Gross P/L",
 )
+# Bounded scan caps: high enough to survive XTB layout changes, low enough to
+# fail fast on corrupted or unrelated workbooks. Not domain rules.
+_EXPORT_DATETIME_SCAN_ROWS = 15
+_ACCOUNT_HEADER_SCAN_ROWS = 15
+_POSITION_HEADER_SCAN_ROWS = 25
 
 
 class XTBPortfolioLoader(PortfolioLoader):
@@ -160,7 +165,9 @@ class XTBPortfolioLoader(PortfolioLoader):
         )
 
     @staticmethod
-    def _sheet_has_position_table(sheet: Worksheet, max_scan_rows: int = 25) -> bool:
+    def _sheet_has_position_table(
+        sheet: Worksheet, max_scan_rows: int = _POSITION_HEADER_SCAN_ROWS
+    ) -> bool:
         required = set(_REQUIRED_COLUMNS)
         for row in sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True):
             present = {str(cell) for cell in row if isinstance(cell, str)}
@@ -170,7 +177,7 @@ class XTBPortfolioLoader(PortfolioLoader):
 
     def _parse_account_summary(self, sheet: Worksheet) -> AccountSummary:
         label_row_idx, label_columns = self._find_labelled_row(
-            sheet, required={"Balance", "Equity"}, max_scan_rows=10
+            sheet, required={"Balance", "Equity"}, max_scan_rows=_ACCOUNT_HEADER_SCAN_ROWS
         )
         value_row = next(
             sheet.iter_rows(
@@ -186,7 +193,7 @@ class XTBPortfolioLoader(PortfolioLoader):
 
     def _parse_positions(self, sheet: Worksheet) -> list[Position]:
         header_row_idx, columns = self._find_labelled_row(
-            sheet, required=set(_REQUIRED_COLUMNS), max_scan_rows=20
+            sheet, required=set(_REQUIRED_COLUMNS), max_scan_rows=_POSITION_HEADER_SCAN_ROWS
         )
 
         positions: list[Position] = []
@@ -245,7 +252,9 @@ class XTBPortfolioLoader(PortfolioLoader):
 
     @staticmethod
     def _find_export_datetime(sheet: Worksheet) -> datetime:
-        for row in sheet.iter_rows(min_row=1, max_row=6, values_only=True):
+        for row in sheet.iter_rows(
+            min_row=1, max_row=_EXPORT_DATETIME_SCAN_ROWS, values_only=True
+        ):
             for cell in row:
                 if isinstance(cell, datetime):
                     return (
@@ -253,7 +262,9 @@ class XTBPortfolioLoader(PortfolioLoader):
                         if cell.tzinfo is None
                         else cell.astimezone(WARSAW)
                     )
-        raise PortfolioMalformedError("Could not find export datetime in sheet header.")
+        raise PortfolioMalformedError(
+            f"Could not find export datetime in first {_EXPORT_DATETIME_SCAN_ROWS} rows."
+        )
 
     def _as_of_date_from_export_datetime(self, path: Path) -> date:
         message_prefix = (

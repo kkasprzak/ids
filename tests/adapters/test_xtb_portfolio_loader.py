@@ -307,3 +307,68 @@ def test_load_latest_falls_back_to_mtime_and_workbook_export_datetime(tmp_path: 
     snapshot = _loader(input_dir).load_latest()
     assert snapshot.positions[0].symbol == "NEWER"
     assert snapshot.as_of_date == date(2026, 5, 3)
+
+
+def _make_xlsx_with_row_offset(
+    path: Path,
+    *,
+    export_dt_row: int,
+    account_label_row: int,
+    position_header_row: int,
+) -> None:
+    """Write a workbook where export datetime, account labels, and position header
+    are placed at explicitly shifted row positions to test dynamic discovery."""
+    wb = Workbook()
+    default = wb.active
+    assert default is not None
+    wb.remove(default)
+    ws = wb.create_sheet("OPEN POSITION 02052026")
+
+    ws.cell(row=export_dt_row, column=2, value=datetime(2026, 5, 2, 10, 30))
+    ws.cell(row=account_label_row, column=4, value="Balance")
+    ws.cell(row=account_label_row, column=7, value="Equity")
+    ws.cell(row=account_label_row + 1, column=4, value=1000.0)
+    ws.cell(row=account_label_row + 1, column=7, value=2000.0)
+    for col, name in enumerate(_HEADER, start=1):
+        ws.cell(row=position_header_row, column=col, value=name)
+    ws.cell(row=position_header_row + 1, column=1, value=101)
+    ws.cell(row=position_header_row + 1, column=2, value="SHIFTED")
+    ws.cell(row=position_header_row + 1, column=3, value="BUY")
+    ws.cell(row=position_header_row + 1, column=4, value=1.0)
+    ws.cell(row=position_header_row + 1, column=5, value=datetime(2026, 5, 1, 9, 0))
+    ws.cell(row=position_header_row + 1, column=6, value=100.0)
+    ws.cell(row=position_header_row + 1, column=7, value=110.0)
+    ws.cell(row=position_header_row + 1, column=8, value=100.0)
+    ws.cell(row=position_header_row + 1, column=9, value=0)
+    ws.cell(row=position_header_row + 1, column=15, value=10.0)
+    ws.cell(row=position_header_row + 2, column=1, value="Total")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(path)
+
+
+def test_account_labels_beyond_original_row_10_are_found(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_row_offset(
+        path, export_dt_row=2, account_label_row=13, position_header_row=15
+    )
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.account.balance_pln == Decimal("1000")
+    assert snapshot.account.equity_pln == Decimal("2000")
+
+
+def test_position_header_beyond_original_row_20_is_found(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_row_offset(
+        path, export_dt_row=2, account_label_row=5, position_header_row=22
+    )
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.positions[0].symbol == "SHIFTED"
+
+
+def test_export_datetime_beyond_original_row_6_is_found(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_row_offset(
+        path, export_dt_row=10, account_label_row=12, position_header_row=14
+    )
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.account.export_datetime.date() == date(2026, 5, 2)
