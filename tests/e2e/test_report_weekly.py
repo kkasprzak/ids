@@ -82,7 +82,7 @@ def test_missing_account_id_fails_with_actionable_message(
     assert "--ikze-account-id" in result.stderr
 
 
-def test_invalid_export_filename_fails_with_loader_message(
+def test_invalid_export_file_fails_with_as_of_derivation_message(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -93,7 +93,7 @@ def test_invalid_export_filename_fails_with_loader_message(
     result = CliRunner().invoke(app, ["report", "weekly", "--export", str(export_path)])
 
     assert result.exit_code == 1
-    assert "does not match expected pattern" in result.stderr
+    assert "Could not derive as_of_date" in result.stderr
 
 
 def test_malformed_export_fails_with_loader_message(
@@ -132,6 +132,21 @@ def test_weekly_report_export_override(tmp_path: Path, monkeypatch: pytest.Monke
     export_path = tmp_path / FIXTURE_XLSX.name
     shutil.copy(FIXTURE_XLSX, export_path)
 
+    monkeypatch.setattr("ids.cli.report._now_warsaw", lambda: FIXED_NOW)
+    monkeypatch.setenv("IDS_IKZE_ACCOUNT_ID", "99999999")
+
+    result = CliRunner().invoke(app, ["report", "weekly", "--export", str(export_path)])
+
+    assert result.exit_code == 0
+    _assert_weekly_outputs_exist(tmp_path)
+
+
+def test_weekly_report_export_override_accepts_custom_filename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    export_path = tmp_path / "custom.xlsx"
+    shutil.copy(FIXTURE_XLSX, export_path)
     monkeypatch.setattr("ids.cli.report._now_warsaw", lambda: FIXED_NOW)
     monkeypatch.setenv("IDS_IKZE_ACCOUNT_ID", "99999999")
 

@@ -109,7 +109,7 @@ On every invocation the system creates any missing directories and config files 
 
 ### Latest XTB export selection
 
-The system globs `inputs/xtb_exports/` for filenames matching the IKZE account ID and parses the `to_date` from the filename. The export with the most recent `to_date` is used. Files for other accounts (e.g., a non-IKZE general XTB account) are ignored in MVP. If filenames do not match the expected pattern the system fails with a clear error rather than guessing.
+The system first globs `inputs/xtb_exports/` for filenames matching the IKZE account ID and parses the `to_date` from the filename. When strict matches exist, the export with the most recent `to_date` is used. If strict matches do not exist, the system falls back to the newest `.xlsx` file by modification time, excluding files whose names clearly declare a different IKZE account ID. In fallback mode, `as_of_date` is derived from the workbook export datetime header (date part). For explicit `--export` paths with non-matching names, the same workbook-header derivation is used; if export datetime cannot be read, the loader fails with a clear error.
 
 ### Monthly report period semantics
 

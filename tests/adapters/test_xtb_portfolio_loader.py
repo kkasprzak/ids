@@ -1,3 +1,4 @@
+import os
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -152,7 +153,7 @@ def test_no_matching_files_raises_with_filename_list(tmp_path: Path) -> None:
         positions=[],
     )
 
-    with pytest.raises(NoPortfolioAvailableError, match="Found:"):
+    with pytest.raises(NoPortfolioAvailableError, match="no eligible fallback XLSX files"):
         _loader(input_dir).load_latest()
 
 
@@ -207,7 +208,7 @@ def test_load_from_path_bypass_loads_specific_file(tmp_path: Path) -> None:
     assert snapshot.positions[0].symbol == "FIRST"
 
 
-def test_load_from_path_rejects_non_matching_filename(tmp_path: Path) -> None:
+def test_load_from_path_non_matching_filename_uses_export_datetime(tmp_path: Path) -> None:
     input_dir = tmp_path / "inputs"
     path = input_dir / "custom.xlsx"
     make_xlsx(
@@ -218,5 +219,48 @@ def test_load_from_path_rejects_non_matching_filename(tmp_path: Path) -> None:
         positions=[],
     )
 
-    with pytest.raises(PortfolioMalformedError, match="does not match expected pattern"):
+    snapshot = _loader(input_dir).load_from_path(path)
+    assert snapshot.as_of_date == date(2026, 5, 2)
+
+
+def test_load_from_path_rejects_file_from_other_ikze_account(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    path = input_dir / "account_ikze_88888888_pl_xlsx_2024-12-31_2026-05-02.xlsx"
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+    )
+
+    with pytest.raises(PortfolioMalformedError, match="clearly belongs to IKZE account"):
         _loader(input_dir).load_from_path(path)
+
+
+def test_load_latest_falls_back_to_mtime_and_workbook_export_datetime(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    first = input_dir / "renamed_a.xlsx"
+    second = input_dir / "renamed_b.xlsx"
+    make_xlsx(
+        first,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 1, 10, 30),
+        positions=[{"Symbol": "OLDER"}],
+    )
+    make_xlsx(
+        second,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 3, 10, 30),
+        positions=[{"Symbol": "NEWER"}],
+    )
+    first_mtime = datetime(2026, 5, 5, 10, 0).timestamp()
+    second_mtime = datetime(2026, 5, 6, 10, 0).timestamp()
+    os.utime(first, (first_mtime, first_mtime))
+    os.utime(second, (second_mtime, second_mtime))
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.positions[0].symbol == "NEWER"
+    assert snapshot.as_of_date == date(2026, 5, 3)
