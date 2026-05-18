@@ -58,7 +58,7 @@ def _view_empty_rows() -> WeeklySnapshotView:
 
 def _render(tmp_path: Path, view: WeeklySnapshotView) -> str:
     output = tmp_path / "weekly.md"
-    MarkdownReportWriter().write_weekly(view, output)
+    MarkdownReportWriter().write_weekly(view, str(output))
     return output.read_text(encoding="utf-8")
 
 
@@ -71,7 +71,7 @@ def test_writes_to_path(tmp_path: Path) -> None:
     writer = MarkdownReportWriter()
     output = tmp_path / "reports" / "weekly.md"
 
-    writer.write_weekly(_view_with_rows(), output)
+    writer.write_weekly(_view_with_rows(), str(output))
 
     assert output.is_file()
     assert output.read_text(encoding="utf-8")
@@ -100,7 +100,7 @@ def test_creates_parent_dir_if_missing(tmp_path: Path) -> None:
     writer = MarkdownReportWriter()
     output = tmp_path / "nested" / "reports" / "weekly.md"
 
-    writer.write_weekly(_view_with_rows(), output)
+    writer.write_weekly(_view_with_rows(), str(output))
 
     assert output.parent.is_dir()
     assert output.is_file()
