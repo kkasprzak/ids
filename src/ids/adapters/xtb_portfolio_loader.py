@@ -25,20 +25,20 @@ _OPEN_SHEET_PREFIX = "OPEN POSITION "
 # Logical field → accepted label aliases. Normalized before matching (strip + casefold).
 # All XTB adapter complexity stays here; domain models never see these strings.
 _POSITION_COLUMN_SCHEMA: dict[str, frozenset[str]] = {
-    "position_id":     frozenset({"Position"}),
-    "symbol":          frozenset({"Symbol"}),
-    "type":            frozenset({"Type"}),
-    "volume":          frozenset({"Volume"}),
-    "open_time":       frozenset({"Open time"}),
-    "open_price":      frozenset({"Open price"}),
-    "market_price":    frozenset({"Market price"}),
-    "purchase_value":  frozenset({"Purchase value"}),
-    "sl":              frozenset({"SL"}),
-    "gross_pl":        frozenset({"Gross P/L", "Gross P&L"}),
+    "position_id": frozenset({"Position"}),
+    "symbol": frozenset({"Symbol"}),
+    "type": frozenset({"Type"}),
+    "volume": frozenset({"Volume"}),
+    "open_time": frozenset({"Open time"}),
+    "open_price": frozenset({"Open price"}),
+    "market_price": frozenset({"Market price"}),
+    "purchase_value": frozenset({"Purchase value"}),
+    "sl": frozenset({"SL"}),
+    "gross_pl": frozenset({"Gross P/L", "Gross P&L"}),
 }
 _ACCOUNT_COLUMN_SCHEMA: dict[str, frozenset[str]] = {
     "balance": frozenset({"Balance"}),
-    "equity":  frozenset({"Equity"}),
+    "equity": frozenset({"Equity"}),
 }
 
 # Bounded scan caps: high enough to survive XTB layout changes, low enough to
@@ -254,8 +254,7 @@ class XTBPortfolioLoader(PortfolioLoader):
         max_scan_rows: int,
     ) -> tuple[int, dict[str, int]]:
         normalized_schema = {
-            logical: {_normalize_label(a) for a in aliases}
-            for logical, aliases in schema.items()
+            logical: {_normalize_label(a) for a in aliases} for logical, aliases in schema.items()
         }
         for row_idx, row in enumerate(
             sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True), start=1
@@ -298,9 +297,7 @@ class XTBPortfolioLoader(PortfolioLoader):
 
     @staticmethod
     def _find_export_datetime(sheet: Worksheet) -> datetime:
-        for row in sheet.iter_rows(
-            min_row=1, max_row=_EXPORT_DATETIME_SCAN_ROWS, values_only=True
-        ):
+        for row in sheet.iter_rows(min_row=1, max_row=_EXPORT_DATETIME_SCAN_ROWS, values_only=True):
             for cell in row:
                 if isinstance(cell, datetime):
                     return (

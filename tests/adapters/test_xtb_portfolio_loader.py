@@ -348,9 +348,7 @@ def _make_xlsx_with_row_offset(
 
 def test_account_labels_beyond_original_row_10_are_found(tmp_path: Path) -> None:
     path = tmp_path / "inputs" / _export_name("2026-05-02")
-    _make_xlsx_with_row_offset(
-        path, export_dt_row=2, account_label_row=13, position_header_row=15
-    )
+    _make_xlsx_with_row_offset(path, export_dt_row=2, account_label_row=13, position_header_row=15)
     snapshot = _loader(tmp_path / "inputs").load_latest()
     assert snapshot.account.balance_pln == Decimal("1000")
     assert snapshot.account.equity_pln == Decimal("2000")
@@ -358,18 +356,14 @@ def test_account_labels_beyond_original_row_10_are_found(tmp_path: Path) -> None
 
 def test_position_header_beyond_original_row_20_is_found(tmp_path: Path) -> None:
     path = tmp_path / "inputs" / _export_name("2026-05-02")
-    _make_xlsx_with_row_offset(
-        path, export_dt_row=2, account_label_row=5, position_header_row=22
-    )
+    _make_xlsx_with_row_offset(path, export_dt_row=2, account_label_row=5, position_header_row=22)
     snapshot = _loader(tmp_path / "inputs").load_latest()
     assert snapshot.positions[0].symbol == "SHIFTED"
 
 
 def test_export_datetime_beyond_original_row_6_is_found(tmp_path: Path) -> None:
     path = tmp_path / "inputs" / _export_name("2026-05-02")
-    _make_xlsx_with_row_offset(
-        path, export_dt_row=10, account_label_row=12, position_header_row=14
-    )
+    _make_xlsx_with_row_offset(path, export_dt_row=10, account_label_row=12, position_header_row=14)
     snapshot = _loader(tmp_path / "inputs").load_latest()
     assert snapshot.account.export_datetime.date() == date(2026, 5, 2)
 
@@ -474,7 +468,7 @@ def test_malformed_position_row_with_numeric_id_raises_error(tmp_path: Path) -> 
     # Write a numeric position_id so footer detection passes, but corrupt open_price.
     for col, _name in enumerate(_HEADER, start=1):
         ws.cell(row=9, column=col, value=None)
-    ws.cell(row=9, column=1, value=999)   # numeric position_id → not a footer
+    ws.cell(row=9, column=1, value=999)  # numeric position_id → not a footer
     ws.cell(row=9, column=2, value="BAD_SYMBOL")
     ws.cell(row=9, column=3, value="BUY")
     ws.cell(row=9, column=4, value=1.0)
