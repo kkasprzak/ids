@@ -216,6 +216,10 @@ class XTBPortfolioLoader(PortfolioLoader):
             sheet, schema=_POSITION_COLUMN_SCHEMA, max_scan_rows=_POSITION_HEADER_SCAN_ROWS
         )
 
+        # Footer detection: any non-numeric value in the position_id cell ends the table.
+        # This covers "Total", "TOTAL", localized variants, and future XTB footer changes
+        # without requiring a hardcoded alias list. Empty cells (None) are spacer rows.
+        # Numeric rows that have bad values in other fields still raise PortfolioMalformedError.
         positions: list[Position] = []
         for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
             first = row[columns["position_id"]] if columns["position_id"] < len(row) else None

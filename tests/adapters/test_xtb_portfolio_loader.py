@@ -425,3 +425,66 @@ def test_missing_required_logical_field_names_it_in_error(tmp_path: Path) -> Non
 
     with pytest.raises(PortfolioMalformedError, match="gross_pl"):
         _loader(tmp_path / "inputs").load_latest()
+
+
+def _make_xlsx_with_custom_footer(path: Path, *, footer: str, n_positions: int = 2) -> None:
+    """Write a workbook replacing the standard 'Total' footer with a custom string."""
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[{"Symbol": f"POS{i}"} for i in range(n_positions)],
+    )
+    wb = load_workbook(path)
+    ws = wb["OPEN POSITION 02052026"]
+    footer_row = 8 + n_positions
+    ws.cell(row=footer_row, column=1, value=footer)
+    wb.save(path)
+
+
+def test_uppercase_total_footer_stops_parsing(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_custom_footer(path, footer="TOTAL", n_positions=2)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert len(snapshot.positions) == 2  # noqa: PLR2004
+
+
+def test_footer_with_surrounding_spaces_stops_parsing(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_custom_footer(path, footer="  Total  ", n_positions=1)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert len(snapshot.positions) == 1
+
+
+def test_malformed_position_row_with_numeric_id_raises_error(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[{"Symbol": "GOOD"}],
+    )
+    wb = load_workbook(path)
+    ws = wb["OPEN POSITION 02052026"]
+    # Row 9 is the second data row (after header row 7 and first position row 8).
+    # Write a numeric position_id so footer detection passes, but corrupt open_price.
+    for col, _name in enumerate(_HEADER, start=1):
+        ws.cell(row=9, column=col, value=None)
+    ws.cell(row=9, column=1, value=999)   # numeric position_id → not a footer
+    ws.cell(row=9, column=2, value="BAD_SYMBOL")
+    ws.cell(row=9, column=3, value="BUY")
+    ws.cell(row=9, column=4, value=1.0)
+    ws.cell(row=9, column=5, value=datetime(2026, 5, 1, 9, 0))
+    ws.cell(row=9, column=6, value="NOT_A_NUMBER")  # open_price — will fail Decimal conversion
+    ws.cell(row=9, column=7, value=100.0)
+    ws.cell(row=9, column=8, value=100.0)
+    ws.cell(row=9, column=9, value=0)
+    ws.cell(row=9, column=15, value=0.0)
+    wb.save(path)
+
+    with pytest.raises(PortfolioMalformedError):
+        _loader(tmp_path / "inputs").load_latest()
