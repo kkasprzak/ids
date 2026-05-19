@@ -6,6 +6,7 @@ import pytest
 from openpyxl import Workbook
 from typer.testing import CliRunner
 
+import ids.cli.report as report_cli
 from ids.cli import app
 from ids.domain.timezones import WARSAW
 
@@ -23,7 +24,7 @@ def _arrange_weekly_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> CliR
     inputs_dir = tmp_path / "inputs" / "xtb_exports"
     inputs_dir.mkdir(parents=True)
     shutil.copy(FIXTURE_XLSX, inputs_dir / FIXTURE_XLSX.name)
-    monkeypatch.setattr("ids.cli.report._now_warsaw", lambda: FIXED_NOW)
+    monkeypatch.setattr(report_cli, "_clock", lambda: FIXED_NOW)
     monkeypatch.setenv("IDS_IKZE_ACCOUNT_ID", "99999999")
     return CliRunner()
 
@@ -132,7 +133,7 @@ def test_weekly_report_export_override(tmp_path: Path, monkeypatch: pytest.Monke
     export_path = tmp_path / FIXTURE_XLSX.name
     shutil.copy(FIXTURE_XLSX, export_path)
 
-    monkeypatch.setattr("ids.cli.report._now_warsaw", lambda: FIXED_NOW)
+    monkeypatch.setattr(report_cli, "_clock", lambda: FIXED_NOW)
     monkeypatch.setenv("IDS_IKZE_ACCOUNT_ID", "99999999")
 
     result = CliRunner().invoke(app, ["report", "weekly", "--export", str(export_path)])
@@ -147,7 +148,7 @@ def test_weekly_report_export_override_accepts_custom_filename(
     monkeypatch.chdir(tmp_path)
     export_path = tmp_path / "custom.xlsx"
     shutil.copy(FIXTURE_XLSX, export_path)
-    monkeypatch.setattr("ids.cli.report._now_warsaw", lambda: FIXED_NOW)
+    monkeypatch.setattr(report_cli, "_clock", lambda: FIXED_NOW)
     monkeypatch.setenv("IDS_IKZE_ACCOUNT_ID", "99999999")
 
     result = CliRunner().invoke(app, ["report", "weekly", "--export", str(export_path)])

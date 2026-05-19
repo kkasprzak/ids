@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -40,6 +41,10 @@ def _now_warsaw() -> datetime:
     return datetime.now(WARSAW)
 
 
+# Stable test seam for deterministic CLI runs; keep tests off private clock helpers.
+_clock: Callable[[], datetime] = _now_warsaw
+
+
 @app.command("weekly")
 def weekly(
     export: Path | None = EXPORT_OPTION,
@@ -73,7 +78,7 @@ def weekly(
         snapshot_path = DEFAULT_SNAPSHOTS_DIR / f"{snapshot.as_of_date.isoformat()}.jsonl"
         console.print(f"[green]✓[/green] Wrote {snapshot_path}")
 
-        view = build_weekly_snapshot(snapshot, now=_now_warsaw())
+        view = build_weekly_snapshot(snapshot, now=_clock())
         writer = MarkdownReportWriter()
         report_path = DEFAULT_REPORTS_DIR / f"{snapshot.as_of_date.isoformat()}_weekly.md"
         writer.write_weekly(view, str(report_path))

@@ -153,8 +153,8 @@ Full CLI integration: `CliRunner` invokes `ids report weekly` with a synthetic X
 compares the output Markdown byte-for-byte against `tests/fixtures/expected/weekly_2026-05-02.md`.
 
 `monkeypatch.chdir(tmp_path)` makes the CLI think `inputs/` and `outputs/` are inside the
-temp directory. `monkeypatch.setattr("ids.cli.report._now_warsaw", lambda: FIXED_NOW)` pins
-the clock so `generated_at` is deterministic.
+temp directory. `monkeypatch.setattr(report_cli, "_clock", lambda: FIXED_NOW)` uses the
+documented CLI test seam to pin the clock so `generated_at` is deterministic.
 
 Tests in this file:
 | Test | What it locks down |
