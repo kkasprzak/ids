@@ -2,7 +2,8 @@
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
-.beads/
+.beads/*
+!.beads/config.yaml
 
 # Python
 __pycache__/
