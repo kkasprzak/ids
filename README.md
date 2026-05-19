@@ -44,6 +44,12 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design record, [`TECH_STAC
 
 Issue tracking uses [beads](https://github.com/gastownhall/beads) with the Dolt database synced to a **separate private remote** (`.beads/` is gitignored in this repo). The public repo holds code; backlog and decision history live elsewhere by design.
 
+To set up beads on a new machine:
+
+```bash
+bd bootstrap   # reads sync.remote from .beads/config.yaml and clones the Dolt DB
+```
+
 ## License
 
 Personal project. No license granted at this time — code is published for reference and learning.
