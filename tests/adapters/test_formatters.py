@@ -11,7 +11,7 @@ from ids.adapters.formatters import (
     format_price,
 )
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.unit
 
 
 @pytest.mark.parametrize(

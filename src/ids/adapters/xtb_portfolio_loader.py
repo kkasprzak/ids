@@ -156,7 +156,7 @@ class XTBPortfolioLoader(PortfolioLoader):
             return workbook[prefix_matches[0]]
 
         semantic_matches = [
-            n for n in workbook.sheetnames if self._sheet_has_position_table(workbook[n])
+            n for n in workbook.sheetnames if _sheet_has_position_table(workbook[n])
         ]
         if len(semantic_matches) == 1:
             log.info(
@@ -178,25 +178,8 @@ class XTBPortfolioLoader(PortfolioLoader):
             f"Sheets: {workbook.sheetnames}"
         )
 
-    @staticmethod
-    def _sheet_has_position_table(
-        sheet: Worksheet, max_scan_rows: int = _POSITION_HEADER_SCAN_ROWS
-    ) -> bool:
-        required_count = len(_POSITION_COLUMN_SCHEMA)
-        for row in sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True):
-            present = {_normalize_label(str(cell)) for cell in row if isinstance(cell, str)}
-            # Count distinct logical fields covered (each field matches if any alias is present)
-            covered = sum(
-                1
-                for aliases in _POSITION_COLUMN_SCHEMA.values()
-                if any(_normalize_label(a) in present for a in aliases)
-            )
-            if covered == required_count:
-                return True
-        return False
-
     def _parse_account_summary(self, sheet: Worksheet) -> AccountSummary:
-        label_row_idx, label_columns = self._find_labelled_row(
+        label_row_idx, label_columns = _find_labelled_row(
             sheet, schema=_ACCOUNT_COLUMN_SCHEMA, max_scan_rows=_ACCOUNT_HEADER_SCAN_ROWS
         )
         value_row = next(
@@ -206,13 +189,13 @@ class XTBPortfolioLoader(PortfolioLoader):
                 values_only=True,
             )
         )
-        balance = self._cell_to_decimal(value_row[label_columns["balance"]])
-        equity = self._cell_to_decimal(value_row[label_columns["equity"]])
-        export_dt = self._find_export_datetime(sheet)
+        balance = _cell_to_decimal(value_row[label_columns["balance"]])
+        equity = _cell_to_decimal(value_row[label_columns["equity"]])
+        export_dt = _find_export_datetime(sheet)
         return AccountSummary(balance_pln=balance, equity_pln=equity, export_datetime=export_dt)
 
     def _parse_positions(self, sheet: Worksheet) -> list[Position]:
-        header_row_idx, columns = self._find_labelled_row(
+        header_row_idx, columns = _find_labelled_row(
             sheet, schema=_POSITION_COLUMN_SCHEMA, max_scan_rows=_POSITION_HEADER_SCAN_ROWS
         )
 
@@ -225,88 +208,25 @@ class XTBPortfolioLoader(PortfolioLoader):
             first = row[columns["position_id"]] if columns["position_id"] < len(row) else None
             if first is None:
                 continue
-            if not isinstance(first, (int, float)):
+            if not isinstance(first, int | float):
                 break
             positions.append(self._row_to_position(row, columns))
         return positions
 
     def _row_to_position(self, row: tuple[Any, ...], columns: dict[str, int]) -> Position:
         sl_raw = row[columns["sl"]]
-        sl = None if sl_raw in (None, 0, 0.0) else self._cell_to_decimal(sl_raw)
+        sl = None if sl_raw in (None, 0, 0.0) else _cell_to_decimal(sl_raw)
         return Position(
             id=int(row[columns["position_id"]]),
             symbol=str(row[columns["symbol"]]),
             type=PositionType(row[columns["type"]]),
-            volume=self._cell_to_decimal(row[columns["volume"]]),
-            open_time=self._naive_dt_to_warsaw(row[columns["open_time"]]),
-            open_price=self._cell_to_decimal(row[columns["open_price"]]),
-            market_price=self._cell_to_decimal(row[columns["market_price"]]),
-            purchase_value_pln=self._cell_to_decimal(row[columns["purchase_value"]]),
-            gross_pl_pln=self._cell_to_decimal(row[columns["gross_pl"]]),
+            volume=_cell_to_decimal(row[columns["volume"]]),
+            open_time=_naive_dt_to_warsaw(row[columns["open_time"]]),
+            open_price=_cell_to_decimal(row[columns["open_price"]]),
+            market_price=_cell_to_decimal(row[columns["market_price"]]),
+            purchase_value_pln=_cell_to_decimal(row[columns["purchase_value"]]),
+            gross_pl_pln=_cell_to_decimal(row[columns["gross_pl"]]),
             sl=sl,
-        )
-
-    @staticmethod
-    def _find_labelled_row(
-        sheet: Worksheet,
-        *,
-        schema: dict[str, frozenset[str]],
-        max_scan_rows: int,
-    ) -> tuple[int, dict[str, int]]:
-        normalized_schema = {
-            logical: {_normalize_label(a) for a in aliases} for logical, aliases in schema.items()
-        }
-        for row_idx, row in enumerate(
-            sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True), start=1
-        ):
-            norm_row = {
-                _normalize_label(str(cell)): idx
-                for idx, cell in enumerate(row)
-                if isinstance(cell, str)
-            }
-            columns: dict[str, int] = {}
-            for logical, norm_aliases in normalized_schema.items():
-                for alias in norm_aliases:
-                    if alias in norm_row:
-                        columns[logical] = norm_row[alias]
-                        break
-            if len(columns) == len(schema):
-                return row_idx, columns
-        required_desc = [
-            f"{logical} (accepts: {', '.join(sorted(aliases))})"
-            for logical, aliases in schema.items()
-        ]
-        raise PortfolioMalformedError(
-            f"Could not find row with all required columns in first {max_scan_rows} rows. "
-            f"Required: {'; '.join(required_desc)}"
-        )
-
-    @staticmethod
-    def _cell_to_decimal(value: Any) -> Decimal:
-        if value is None:
-            raise PortfolioMalformedError("Expected number, got None")
-        if isinstance(value, Decimal):
-            return value
-        return Decimal(str(value))
-
-    @staticmethod
-    def _naive_dt_to_warsaw(value: Any) -> datetime:
-        if not isinstance(value, datetime):
-            raise PortfolioMalformedError(f"Expected datetime, got {type(value).__name__}")
-        return value.replace(tzinfo=WARSAW) if value.tzinfo is None else value.astimezone(WARSAW)
-
-    @staticmethod
-    def _find_export_datetime(sheet: Worksheet) -> datetime:
-        for row in sheet.iter_rows(min_row=1, max_row=_EXPORT_DATETIME_SCAN_ROWS, values_only=True):
-            for cell in row:
-                if isinstance(cell, datetime):
-                    return (
-                        cell.replace(tzinfo=WARSAW)
-                        if cell.tzinfo is None
-                        else cell.astimezone(WARSAW)
-                    )
-        raise PortfolioMalformedError(
-            f"Could not find export datetime in first {_EXPORT_DATETIME_SCAN_ROWS} rows."
         )
 
     def _as_of_date_from_export_datetime(self, path: Path) -> date:
@@ -316,8 +236,85 @@ class XTBPortfolioLoader(PortfolioLoader):
         try:
             workbook = load_workbook(path, data_only=True, read_only=True)
             sheet = self._find_open_position_sheet(workbook)
-            return self._find_export_datetime(sheet).date()
+            return _find_export_datetime(sheet).date()
         except PortfolioMalformedError as exc:
             raise PortfolioMalformedError(f"{message_prefix}: {exc}") from exc
         except Exception as exc:
             raise PortfolioMalformedError(f"{message_prefix}: {exc}") from exc
+
+
+def _sheet_has_position_table(
+    sheet: Worksheet, max_scan_rows: int = _POSITION_HEADER_SCAN_ROWS
+) -> bool:
+    required_count = len(_POSITION_COLUMN_SCHEMA)
+    for row in sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True):
+        present = {_normalize_label(str(cell)) for cell in row if isinstance(cell, str)}
+        # Count distinct logical fields covered (each field matches if any alias is present)
+        covered = sum(
+            1
+            for aliases in _POSITION_COLUMN_SCHEMA.values()
+            if any(_normalize_label(a) in present for a in aliases)
+        )
+        if covered == required_count:
+            return True
+    return False
+
+
+def _find_labelled_row(
+    sheet: Worksheet,
+    *,
+    schema: dict[str, frozenset[str]],
+    max_scan_rows: int,
+) -> tuple[int, dict[str, int]]:
+    normalized_schema = {
+        logical: {_normalize_label(a) for a in aliases} for logical, aliases in schema.items()
+    }
+    for row_idx, row in enumerate(
+        sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True), start=1
+    ):
+        norm_row = {
+            _normalize_label(str(cell)): idx
+            for idx, cell in enumerate(row)
+            if isinstance(cell, str)
+        }
+        columns: dict[str, int] = {}
+        for logical, norm_aliases in normalized_schema.items():
+            for alias in norm_aliases:
+                if alias in norm_row:
+                    columns[logical] = norm_row[alias]
+                    break
+        if len(columns) == len(schema):
+            return row_idx, columns
+    required_desc = [
+        f"{logical} (accepts: {', '.join(sorted(aliases))})" for logical, aliases in schema.items()
+    ]
+    raise PortfolioMalformedError(
+        f"Could not find row with all required columns in first {max_scan_rows} rows. "
+        f"Required: {'; '.join(required_desc)}"
+    )
+
+
+def _cell_to_decimal(value: Any) -> Decimal:
+    if value is None:
+        raise PortfolioMalformedError("Expected number, got None")
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
+def _naive_dt_to_warsaw(value: Any) -> datetime:
+    if not isinstance(value, datetime):
+        raise PortfolioMalformedError(f"Expected datetime, got {type(value).__name__}")
+    return value.replace(tzinfo=WARSAW) if value.tzinfo is None else value.astimezone(WARSAW)
+
+
+def _find_export_datetime(sheet: Worksheet) -> datetime:
+    for row in sheet.iter_rows(min_row=1, max_row=_EXPORT_DATETIME_SCAN_ROWS, values_only=True):
+        for cell in row:
+            if isinstance(cell, datetime):
+                return (
+                    cell.replace(tzinfo=WARSAW) if cell.tzinfo is None else cell.astimezone(WARSAW)
+                )
+    raise PortfolioMalformedError(
+        f"Could not find export datetime in first {_EXPORT_DATETIME_SCAN_ROWS} rows."
+    )
