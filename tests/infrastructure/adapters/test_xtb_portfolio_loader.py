@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook, load_workbook
 
-from ids.adapters.xtb_portfolio_loader import XTBPortfolioLoader
-from ids.domain.ports.portfolio import NoPortfolioAvailableError, PortfolioMalformedError
+from ids.application.ports.portfolio import NoPortfolioAvailableError, PortfolioMalformedError
 from ids.domain.timezones import WARSAW
-from tests.adapters.conftest import _HEADER, make_xlsx
+from ids.infrastructure.adapters.xtb_portfolio_loader import XTBPortfolioLoader
+from tests.infrastructure.adapters.conftest import _HEADER, make_xlsx
 
 pytestmark = pytest.mark.integration
 

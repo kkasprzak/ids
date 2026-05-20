@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from ids.adapters.markdown_report_writer import MarkdownReportWriter
+from ids.application.viewmodels import PositionRow, WeeklySnapshotView
 from ids.domain.timezones import WARSAW
-from ids.domain.viewmodels import PositionRow, WeeklySnapshotView
+from ids.infrastructure.adapters.markdown_report_writer import MarkdownReportWriter
 
 pytestmark = pytest.mark.integration
 

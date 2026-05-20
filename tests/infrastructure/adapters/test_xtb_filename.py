@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from ids.adapters.xtb_filename import parse_xtb_account_id, parse_xtb_filename
+from ids.infrastructure.adapters.xtb_filename import parse_xtb_account_id, parse_xtb_filename
 
 pytestmark = pytest.mark.integration
 

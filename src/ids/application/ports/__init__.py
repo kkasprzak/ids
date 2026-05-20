@@ -1,11 +1,11 @@
-from ids.domain.ports.portfolio import (
+from ids.application.ports.portfolio import (
     NoPortfolioAvailableError,
     PortfolioLoader,
     PortfolioLoaderError,
     PortfolioMalformedError,
 )
-from ids.domain.ports.report_writer import ReportWriter, ReportWriterError
-from ids.domain.ports.snapshot_store import (
+from ids.application.ports.report_writer import ReportWriter, ReportWriterError
+from ids.application.ports.snapshot_store import (
     SnapshotNotFoundError,
     SnapshotStore,
     SnapshotStoreError,

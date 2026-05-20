@@ -3,8 +3,8 @@
 from datetime import datetime
 from decimal import Decimal
 
+from ids.application.viewmodels import PositionRow, WeeklySnapshotView
 from ids.domain.models import PortfolioSnapshot
-from ids.domain.viewmodels import PositionRow, WeeklySnapshotView
 
 TWO_DP = Decimal("0.01")
 ZERO = Decimal("0.00")

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from ids.adapters.formatters import (
+from ids.infrastructure.adapters.formatters import (
     MINUS,
     format_pct_signed,
     format_pct_unsigned,

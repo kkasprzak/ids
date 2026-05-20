@@ -4,10 +4,10 @@ from decimal import Decimal
 
 import pytest
 
+from ids.application.viewmodels import PositionRow, WeeklySnapshotView
+from ids.application.weekly_snapshot import build_weekly_snapshot
 from ids.domain.models import AccountSummary, PortfolioSnapshot, Position
-from ids.domain.services.weekly_snapshot import build_weekly_snapshot
 from ids.domain.timezones import WARSAW
-from ids.domain.viewmodels import PositionRow, WeeklySnapshotView
 
 pytestmark = pytest.mark.unit
 

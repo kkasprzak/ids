@@ -1,7 +1,7 @@
 from typing import Protocol
 
+from ids.application.viewmodels import WeeklySnapshotView
 from ids.domain.errors import IDSError
-from ids.domain.viewmodels import WeeklySnapshotView
 
 
 class ReportWriterError(IDSError):

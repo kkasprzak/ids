@@ -3,21 +3,21 @@ from typing import Any, cast
 
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
-from ids.adapters.formatters import (
+from ids.application.ports.report_writer import ReportWriter
+from ids.application.viewmodels import WeeklySnapshotView
+from ids.infrastructure.adapters.formatters import (
     format_pct_signed,
     format_pct_unsigned,
     format_pln,
     format_pln_signed,
     format_price,
 )
-from ids.domain.ports.report_writer import ReportWriter
-from ids.domain.viewmodels import WeeklySnapshotView
 
 
 class MarkdownReportWriter(ReportWriter):
     def __init__(self) -> None:
         self._env = Environment(
-            loader=PackageLoader("ids.adapters", "templates"),
+            loader=PackageLoader("ids.infrastructure.adapters", "templates"),
             autoescape=select_autoescape(default=False),
             undefined=StrictUndefined,
             trim_blocks=True,

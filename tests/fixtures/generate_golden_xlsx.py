@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-from tests.adapters.conftest import make_xlsx
+from tests.infrastructure.adapters.conftest import make_xlsx
 
 FIXTURE_PATH = Path(__file__).parent / "account_ikze_99999999_pl_xlsx_2024-12-31_2026-05-02.xlsx"
 

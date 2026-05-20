@@ -49,10 +49,10 @@ root_packages = ["ids"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Domain must not import adapters or CLI"
+name = "Domain must not import outer layers"
 type = "forbidden"
 source_modules = ["ids.domain"]
-forbidden_modules = ["ids.adapters", "ids.cli"]
+forbidden_modules = ["ids.application", "ids.infrastructure", "ids.cli"]
 
 [[tool.importlinter.contracts]]
 name = "Domain must not import I/O libraries"
@@ -80,15 +80,21 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Adapters must not import CLI"
+name = "Application must not import infrastructure or CLI"
 type = "forbidden"
-source_modules = ["ids.adapters"]
+source_modules = ["ids.application"]
+forbidden_modules = ["ids.infrastructure", "ids.cli"]
+
+[[tool.importlinter.contracts]]
+name = "Infrastructure must not import CLI"
+type = "forbidden"
+source_modules = ["ids.infrastructure"]
 forbidden_modules = ["ids.cli"]
 
 [[tool.importlinter.contracts]]
-name = "Hexagonal layers flow top-down: CLI -> adapters -> domain"
+name = "Hexagonal layers flow top-down: CLI -> infrastructure -> application -> domain"
 type = "layers"
-layers = ["ids.cli", "ids.adapters", "ids.domain"]
+layers = ["ids.cli", "ids.infrastructure", "ids.application", "ids.domain"]
 exhaustive = false
 
 [tool.pytest.ini_options]

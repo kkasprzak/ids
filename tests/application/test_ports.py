@@ -1,7 +1,6 @@
 import pytest
 
-from ids.domain.errors import IDSError
-from ids.domain.ports import (
+from ids.application.ports import (
     NoPortfolioAvailableError,
     PortfolioLoaderError,
     PortfolioMalformedError,
@@ -9,6 +8,7 @@ from ids.domain.ports import (
     SnapshotNotFoundError,
     SnapshotStoreError,
 )
+from ids.domain.errors import IDSError
 
 pytestmark = pytest.mark.unit
 

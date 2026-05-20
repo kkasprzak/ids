@@ -5,9 +5,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from ids.adapters.jsonl_snapshot_store import JSONLSnapshotStore
-from ids.adapters.markdown_report_writer import MarkdownReportWriter
-from ids.adapters.xtb_portfolio_loader import XTBPortfolioLoader
+from ids.application.weekly_snapshot import build_weekly_snapshot
 from ids.cli.constants import (
     DEFAULT_REPORTS_DIR,
     DEFAULT_SNAPSHOTS_DIR,
@@ -15,8 +13,10 @@ from ids.cli.constants import (
     IKZE_ACCOUNT_ID_ENV,
 )
 from ids.domain.errors import IDSError
-from ids.domain.services.weekly_snapshot import build_weekly_snapshot
 from ids.domain.timezones import WARSAW
+from ids.infrastructure.adapters.jsonl_snapshot_store import JSONLSnapshotStore
+from ids.infrastructure.adapters.markdown_report_writer import MarkdownReportWriter
+from ids.infrastructure.adapters.xtb_portfolio_loader import XTBPortfolioLoader
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console()
