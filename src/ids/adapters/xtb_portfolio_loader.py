@@ -2,7 +2,7 @@ import logging
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from openpyxl import load_workbook
 from openpyxl.workbook import Workbook
@@ -59,48 +59,25 @@ class XTBPortfolioLoader(PortfolioLoader):
         self._account_id = ikze_account_id
 
     def load_latest(self) -> PortfolioSnapshot:
-        if not self._input_dir.is_dir():
-            raise NoPortfolioAvailableError(
-                f"Directory `{self._input_dir}/` not found.\n"
-                f"  Create it and place an XTB XLSX export there:\n"
-                f"    mkdir -p {self._input_dir}/\n"
-                f"    cp ~/Downloads/account_ikze_{self._account_id}_*.xlsx {self._input_dir}/"
-            )
+        latest_file, as_of_date = self._select_latest_export()
+        return self._parse(latest_file, as_of_date)
 
-        xlsx_files = sorted(self._input_dir.glob("*.xlsx"))
-        candidates = [
-            (parse_xtb_filename(path.name, expected_account_id=self._account_id), path)
-            for path in xlsx_files
-        ]
-        matching = [(as_of, path) for as_of, path in candidates if as_of is not None]
-        if matching:
-            for as_of, path in candidates:
-                if as_of is None:
-                    log.debug("Skipped %s (does not match IKZE pattern)", path.name)
-            matching.sort(key=lambda item: item[0])
-            as_of_date, latest_file = matching[-1]
-            return self._parse(latest_file, as_of_date)
+    def load_from_path(self, path: Path) -> PortfolioSnapshot:
+        as_of_date = self._as_of_date_for_path(path)
+        return self._parse(path, as_of_date)
 
-        fallback_candidates: list[Path] = []
-        excluded_other_accounts: list[str] = []
-        for path in xlsx_files:
-            declared_account_id = parse_xtb_account_id(path.name)
-            if declared_account_id is not None and declared_account_id != self._account_id:
-                excluded_other_accounts.append(path.name)
-                continue
-            fallback_candidates.append(path)
+    def _select_latest_export(self) -> tuple[Path, date]:
+        xlsx_files = self._list_xlsx_files()
 
+        strict_match = self._latest_strict_filename_match(xlsx_files)
+        if strict_match is not None:
+            return strict_match
+
+        fallback_candidates, excluded_other_accounts = self._eligible_fallback_candidates(
+            xlsx_files
+        )
         if not fallback_candidates:
-            found = [path.name for path in xlsx_files]
-            excluded = excluded_other_accounts if excluded_other_accounts else "(none)"
-            raise NoPortfolioAvailableError(
-                f"No IKZE export matching pattern in `{self._input_dir}/` "
-                f"and no eligible fallback XLSX files.\n"
-                f"  Expected pattern:\n"
-                f"    account_ikze_{self._account_id}_pl_xlsx_<YYYY-MM-DD>_<YYYY-MM-DD>.xlsx\n"
-                f"  Found: {found if found else '(empty)'}\n"
-                f"  Excluded as other account IDs: {excluded}"
-            )
+            self._raise_no_available_export(xlsx_files, excluded_other_accounts)
 
         latest_file = max(fallback_candidates, key=lambda path: path.stat().st_mtime)
         as_of_date = self._as_of_date_from_export_datetime(latest_file)
@@ -110,12 +87,62 @@ class XTBPortfolioLoader(PortfolioLoader):
             latest_file.name,
             as_of_date.isoformat(),
         )
-        return self._parse(latest_file, as_of_date)
+        return latest_file, as_of_date
 
-    def load_from_path(self, path: Path) -> PortfolioSnapshot:
+    def _list_xlsx_files(self) -> list[Path]:
+        if not self._input_dir.is_dir():
+            raise NoPortfolioAvailableError(
+                f"Directory `{self._input_dir}/` not found.\n"
+                f"  Create it and place an XTB XLSX export there:\n"
+                f"    mkdir -p {self._input_dir}/\n"
+                f"    cp ~/Downloads/account_ikze_{self._account_id}_*.xlsx {self._input_dir}/"
+            )
+        return sorted(self._input_dir.glob("*.xlsx"))
+
+    def _latest_strict_filename_match(self, xlsx_files: list[Path]) -> tuple[Path, date] | None:
+        candidates = [
+            (parse_xtb_filename(path.name, expected_account_id=self._account_id), path)
+            for path in xlsx_files
+        ]
+        matching = [(as_of, path) for as_of, path in candidates if as_of is not None]
+        if not matching:
+            return None
+
+        for as_of, path in candidates:
+            if as_of is None:
+                log.debug("Skipped %s (does not match IKZE pattern)", path.name)
+        as_of_date, latest_file = max(matching, key=lambda item: item[0])
+        return latest_file, as_of_date
+
+    def _eligible_fallback_candidates(self, xlsx_files: list[Path]) -> tuple[list[Path], list[str]]:
+        fallback_candidates: list[Path] = []
+        excluded_other_accounts: list[str] = []
+        for path in xlsx_files:
+            declared_account_id = parse_xtb_account_id(path.name)
+            if declared_account_id is not None and declared_account_id != self._account_id:
+                excluded_other_accounts.append(path.name)
+                continue
+            fallback_candidates.append(path)
+        return fallback_candidates, excluded_other_accounts
+
+    def _raise_no_available_export(
+        self, xlsx_files: list[Path], excluded_other_accounts: list[str]
+    ) -> NoReturn:
+        found = [path.name for path in xlsx_files]
+        excluded = excluded_other_accounts if excluded_other_accounts else "(none)"
+        raise NoPortfolioAvailableError(
+            f"No IKZE export matching pattern in `{self._input_dir}/` "
+            f"and no eligible fallback XLSX files.\n"
+            f"  Expected pattern:\n"
+            f"    account_ikze_{self._account_id}_pl_xlsx_<YYYY-MM-DD>_<YYYY-MM-DD>.xlsx\n"
+            f"  Found: {found if found else '(empty)'}\n"
+            f"  Excluded as other account IDs: {excluded}"
+        )
+
+    def _as_of_date_for_path(self, path: Path) -> date:
         as_of = parse_xtb_filename(path.name, expected_account_id=self._account_id)
         if as_of is not None:
-            return self._parse(path, as_of)
+            return as_of
 
         declared_account_id = parse_xtb_account_id(path.name)
         if declared_account_id is not None and declared_account_id != self._account_id:
@@ -130,12 +157,11 @@ class XTBPortfolioLoader(PortfolioLoader):
             path.name,
             as_of_from_workbook.isoformat(),
         )
-        return self._parse(path, as_of_from_workbook)
+        return as_of_from_workbook
 
     def _parse(self, path: Path, as_of_date: date) -> PortfolioSnapshot:
         try:
-            workbook = load_workbook(path, data_only=True, read_only=True)
-            sheet = self._find_open_position_sheet(workbook)
+            sheet = self._load_open_position_sheet(path)
             account = self._parse_account_summary(sheet)
             positions = self._parse_positions(sheet)
         except PortfolioMalformedError:
@@ -149,6 +175,10 @@ class XTBPortfolioLoader(PortfolioLoader):
             account=account,
             positions=tuple(positions),
         )
+
+    def _load_open_position_sheet(self, path: Path) -> Worksheet:
+        workbook = load_workbook(path, data_only=True, read_only=True)
+        return self._find_open_position_sheet(workbook)
 
     def _find_open_position_sheet(self, workbook: Workbook) -> Worksheet:
         prefix_matches = [n for n in workbook.sheetnames if n.startswith(_OPEN_SHEET_PREFIX)]
@@ -234,8 +264,7 @@ class XTBPortfolioLoader(PortfolioLoader):
             f"Could not derive as_of_date for `{path.name}` from workbook export datetime"
         )
         try:
-            workbook = load_workbook(path, data_only=True, read_only=True)
-            sheet = self._find_open_position_sheet(workbook)
+            sheet = self._load_open_position_sheet(path)
             return _find_export_datetime(sheet).date()
         except PortfolioMalformedError as exc:
             raise PortfolioMalformedError(f"{message_prefix}: {exc}") from exc
