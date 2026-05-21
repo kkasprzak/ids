@@ -30,11 +30,12 @@ uv run pre-commit install   # enable git hooks
 
 ## Architecture
 
-Hexagonal (ports & adapters), three layers under `src/ids/`:
+Hexagonal (ports & adapters), four layers under `src/ids/`:
 
-- `domain/` — pure business logic; no I/O library imports
-- `adapters/` — concrete I/O (XLSX, JSONL, YAML, Markdown, PNG)
-- `cli/` — thin `typer` orchestration
+- `domain/` — pure domain models and rules; no I/O library imports
+- `application/` — use-case orchestration, ports, and report view models
+- `infrastructure/` — concrete I/O adapters (XLSX, JSONL, Markdown, templates)
+- `cli/` — thin `typer` composition root
 
 `outputs/snapshots/<as_of>.jsonl` is the canonical time-series substrate; reports are views over snapshot history.
 

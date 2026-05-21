@@ -4,13 +4,14 @@ This document records the design decisions that shape the Investment Decision Sy
 
 ## Architectural style: hexagonal (ports and adapters)
 
-The codebase is organised around three layers:
+The codebase is organised around four layers:
 
-- **Domain** — pure business logic. Functions take domain models as input and return domain models or simple value types as output. No I/O, no global state, no library-specific types in signatures.
-- **Adapters** — concrete implementations of I/O. Each adapter implements a `Protocol` defined in the domain and translates between external formats (XLSX, Markdown, PNG, YAML, file system) and domain models.
-- **CLI** — thin orchestration layer. Wires adapters into domain functions and exposes them as `typer` subcommands.
+- **Domain** — pure domain models and rules. Functions take domain models as input and return domain models or simple value types as output. No I/O, no global state, no library-specific types in signatures.
+- **Application** — use-case logic and ports. It defines `Protocol` contracts for required I/O, projects domain models into report view models, and depends only on the domain.
+- **Infrastructure** — concrete implementations of I/O. Adapters implement application ports and translate between external formats (XLSX, Markdown, JSONL, file system) and application/domain models.
+- **CLI** — composition root and command surface. Wires infrastructure adapters into application functions and exposes them as `typer` subcommands.
 
-The boundary contract is strict: domain code never imports `pandas`, `matplotlib`, `openpyxl`, `yaml`, `frontmatter`, `jinja2`, or any I/O library at module level. Those imports live exclusively inside adapter modules. Inside a domain compute function a local import (e.g., a temporary `pandas.Series` for drawdown calculation) is acceptable as long as it does not appear in function signatures or domain types.
+The boundary contract is strict: domain code never imports `pandas`, `matplotlib`, `openpyxl`, `yaml`, `frontmatter`, `jinja2`, or any I/O library at module level. Those imports live exclusively inside infrastructure modules. Application code also never imports infrastructure or CLI code. Import-linter enforces the dependency flow `cli -> infrastructure -> application -> domain`.
 
 ## Project layout
 
@@ -19,9 +20,10 @@ The boundary contract is strict: domain code never imports `pandas`, `matplotlib
 
 ```
 src/ids/
-├── domain/        ← pure business logic
-├── adapters/      ← I/O implementations
-└── cli/           ← typer entry point
+├── domain/          ← pure domain models and rules
+├── application/     ← use cases, ports, report view models
+├── infrastructure/  ← I/O implementations
+└── cli/             ← typer composition root
 
 tests/             ← see "Test strategy" section
 
@@ -44,7 +46,8 @@ specs/                              (user stories — see PRD section 6)
 
 ## Domain types
 
-- **Frozen dataclasses** model domain concepts: `Position`, `CashOperation`, `AccountSummary`, `Alert`, `WeeklyReportData`, `MonthlyReportData`, `BenchmarkConfig`, etc.
+- **Frozen dataclasses** model domain concepts: `AccountSummary`, `Position`, and `PortfolioSnapshot`.
+- Report-oriented dataclasses live in `ids.application.viewmodels`; they are projections over domain models, not domain entities.
 - Dataclasses are `@dataclass(frozen=True)` so they are hashable, comparable, and safe to pass around without aliasing surprises.
 - Optional fields use `T | None`.
 - Enums for fixed sets of values (`PositionType`, `Outcome`, `AlertSeverity`).
@@ -71,19 +74,19 @@ specs/                              (user stories — see PRD section 6)
 
 ## Ports and adapters
 
-Every I/O concern is a port. Domain code depends only on the port; adapters provide the implementation. Tests can substitute fake implementations for any port.
+Every I/O concern is a port. Application code depends only on the port; infrastructure adapters provide the implementation. Tests can substitute fake implementations for any port.
 
 | Port | Default adapter | Purpose |
 |------|-----------------|---------|
-| `PortfolioLoader` | `XTBPortfolioLoader` | Loads the most recent portfolio snapshot from the configured source. |
-| `SnapshotStore` | `JSONLSnapshotStore` | Persists and retrieves the historical series of `PortfolioSnapshot` records. |
-| `ReportWriter` | `MarkdownReportWriter` | Renders a view-model into a Markdown report file using `jinja2` templates. |
+| `ids.application.ports.PortfolioLoader` | `ids.infrastructure.adapters.XTBPortfolioLoader` | Loads the most recent portfolio snapshot from the configured source. |
+| `ids.application.ports.SnapshotStore` | `ids.infrastructure.adapters.JSONLSnapshotStore` | Persists and retrieves the historical series of `PortfolioSnapshot` records. |
+| `ids.application.ports.ReportWriter` | `ids.infrastructure.adapters.MarkdownReportWriter` | Renders a view-model into a Markdown report file using `jinja2` templates. |
 | `ConfigLoader` | `YAMLConfigLoader` | Reads `inputs/config.yaml` and returns `BenchmarkConfig`. |
 | `InstrumentMetadataStore` | `YAMLInstrumentStore` | Reads and writes `inputs/instruments.yaml`. |
 | `PositionLogStore` | `MarkdownPositionLogStore` | Reads and writes per-position Markdown files with frontmatter. |
 | `ChartWriter` | `MatplotlibChartWriter` | Writes PNG chart files. |
 
-`PortfolioSnapshot` is the canonical domain record of a portfolio state at a point in time (`as_of_date`). It is persisted via `SnapshotStore` and read back by every report-generation flow; the Markdown weekly/monthly reports are views over the snapshot history, not the source of truth. The adapter that loads a snapshot stamps a `source_id` field (for example `xtb:<filename>`) so the domain can render provenance without knowing the source format.
+`PortfolioSnapshot` is the canonical domain record of a portfolio state at a point in time (`as_of_date`). It is persisted via `SnapshotStore` and read back by every report-generation flow; the Markdown weekly/monthly reports are views over the snapshot history, not the source of truth. The adapter that loads a snapshot stamps a `source_id` field (for example `xtb:<filename>`) so application/reporting code can render provenance without coupling the domain to the source format.
 
 ## File ownership
 
@@ -136,10 +139,11 @@ Every report run persists the parsed `PortfolioSnapshot` to `outputs/snapshots/<
 
 ## Test strategy
 
-Three layers, each with a different role:
+Four test groups mirror the source layers and user-facing boundary:
 
 - **Domain unit tests** — pure-function tests; construct domain models in code, call functions, assert on returned models. No fixtures from disk. Coverage target ~90%.
-- **Adapter unit tests** — verify each adapter's translation contract using small, anonymised fixture files in `tests/fixtures/`. Coverage target ~70%.
+- **Application unit tests** — verify use-case projections and port contracts without infrastructure dependencies.
+- **Infrastructure adapter tests** — verify each adapter's translation contract using small, anonymised fixture files in `tests/fixtures/`. Coverage target ~70%.
 - **End-to-end smoke tests** — run the CLI against a small sample data set and verify the produced files; mix snapshot tests (for stable rendered output) and structural assertions (for files where exact byte equality would be fragile).
 
 Overall coverage target: ~80%. Coverage is a guide, not a ceiling.
@@ -148,10 +152,11 @@ Tests mirror the source structure under `src/ids/`:
 
 ```
 tests/
-├── domain/        ← pure-function tests, no fixtures from disk
-├── adapters/      ← translation tests with anonymised fixtures
-├── fixtures/      ← sample XLSX, instruments.yaml, etc.
-└── e2e/           ← CLI smoke tests against sample data
+├── domain/          ← pure domain tests, no fixtures from disk
+├── application/     ← use-case and port-contract tests
+├── infrastructure/  ← adapter translation tests with anonymised fixtures
+├── fixtures/        ← sample XLSX, instruments.yaml, etc.
+└── e2e/             ← CLI smoke tests against sample data
 ```
 
 ## Quality gates
