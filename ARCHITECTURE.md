@@ -9,9 +9,9 @@ The codebase is organised around four layers:
 - **Domain** — pure domain models and rules. Functions take domain models as input and return domain models or simple value types as output. No I/O, no global state, no library-specific types in signatures.
 - **Application** — use-case logic and ports. It defines `Protocol` contracts for required I/O, projects domain models into report view models, and depends only on the domain.
 - **Infrastructure** — concrete implementations of I/O. Adapters implement application ports and translate between external formats (XLSX, Markdown, JSONL, file system) and application/domain models.
-- **CLI** — composition root and command surface. Wires infrastructure adapters into application functions and exposes them as `typer` subcommands.
+- **Presentation** — user-facing delivery adapters and composition roots. The current presentation adapter is a `typer` CLI that wires infrastructure adapters into application functions.
 
-The boundary contract is strict: domain code never imports `pandas`, `matplotlib`, `openpyxl`, `yaml`, `frontmatter`, `jinja2`, or any I/O library at module level. Those imports live exclusively inside infrastructure modules. Application code also never imports infrastructure or CLI code. Import-linter enforces the dependency flow `cli -> infrastructure -> application -> domain`.
+The boundary contract is strict: domain code never imports `pandas`, `matplotlib`, `openpyxl`, `yaml`, `frontmatter`, `jinja2`, or any I/O library at module level. Those imports live exclusively inside infrastructure modules. Application code also never imports infrastructure or presentation code. Import-linter enforces the dependency flow `presentation -> infrastructure -> application -> domain`.
 
 ## Project layout
 
@@ -23,7 +23,7 @@ src/ids/
 ├── domain/          ← pure domain models and rules
 ├── application/     ← use cases, ports, report view models
 ├── infrastructure/  ← I/O implementations
-└── cli/             ← typer composition root
+└── presentation/    ← delivery adapters and composition roots
 
 tests/             ← see "Test strategy" section
 
@@ -130,8 +130,9 @@ Running a report command twice for the same period produces the same output, ass
 
 Every report run persists the parsed `PortfolioSnapshot` to `outputs/snapshots/<as_of>.jsonl` before rendering. This is the substrate for all time-series views (equity curve, drawdown, Discipline Twin). The store is local-only by default — `outputs/` is gitignored to keep personal financial data private. One file per `as_of_date`, deterministically serialized. An owner who wants to version snapshots privately should do so in a separate private repo, not the public codebase.
 
-## CLI structure
+## Presentation and CLI structure
 
+- Presentation code lives under `ids.presentation`; the current adapter is `ids.presentation.cli`.
 - Single binary `ids` with subcommands: `report weekly`, `report monthly`, `check-purchase`.
 - Subcommands accept flags or fall back to interactive prompts (`typer` pattern).
 - All user-facing output uses `rich`; diagnostic logging uses the standard `logging` module.
@@ -155,6 +156,7 @@ tests/
 ├── domain/          ← pure domain tests, no fixtures from disk
 ├── application/     ← use-case and port-contract tests
 ├── infrastructure/  ← adapter translation tests with anonymised fixtures
+├── presentation/    ← CLI/presentation tests
 ├── fixtures/        ← sample XLSX, instruments.yaml, etc.
 └── e2e/             ← CLI smoke tests against sample data
 ```

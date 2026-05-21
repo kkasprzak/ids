@@ -6,9 +6,9 @@ import pytest
 from openpyxl import Workbook
 from typer.testing import CliRunner
 
-import ids.cli.report as report_cli
-from ids.cli import app
+import ids.presentation.cli.report as report_cli
 from ids.domain.timezones import WARSAW
+from ids.presentation.cli import app
 
 pytestmark = pytest.mark.e2e
 

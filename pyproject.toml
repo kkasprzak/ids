@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ids = "ids.cli:app"
+ids = "ids.presentation.cli:app"
 
 [dependency-groups]
 dev = [
@@ -52,7 +52,7 @@ include_external_packages = true
 name = "Domain must not import outer layers"
 type = "forbidden"
 source_modules = ["ids.domain"]
-forbidden_modules = ["ids.application", "ids.infrastructure", "ids.cli"]
+forbidden_modules = ["ids.application", "ids.infrastructure", "ids.presentation"]
 
 [[tool.importlinter.contracts]]
 name = "Domain must not import I/O libraries"
@@ -80,21 +80,21 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Application must not import infrastructure or CLI"
+name = "Application must not import infrastructure or presentation"
 type = "forbidden"
 source_modules = ["ids.application"]
-forbidden_modules = ["ids.infrastructure", "ids.cli"]
+forbidden_modules = ["ids.infrastructure", "ids.presentation"]
 
 [[tool.importlinter.contracts]]
-name = "Infrastructure must not import CLI"
+name = "Infrastructure must not import presentation"
 type = "forbidden"
 source_modules = ["ids.infrastructure"]
-forbidden_modules = ["ids.cli"]
+forbidden_modules = ["ids.presentation"]
 
 [[tool.importlinter.contracts]]
-name = "Hexagonal layers flow top-down: CLI -> infrastructure -> application -> domain"
+name = "Hexagonal layers flow top-down: presentation -> infrastructure -> application -> domain"
 type = "layers"
-layers = ["ids.cli", "ids.infrastructure", "ids.application", "ids.domain"]
+layers = ["ids.presentation", "ids.infrastructure", "ids.application", "ids.domain"]
 exhaustive = false
 
 [tool.pytest.ini_options]

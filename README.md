@@ -35,7 +35,7 @@ Hexagonal (ports & adapters), four layers under `src/ids/`:
 - `domain/` — pure domain models and rules; no I/O library imports
 - `application/` — use-case orchestration, ports, and report view models
 - `infrastructure/` — concrete I/O adapters (XLSX, JSONL, Markdown, templates)
-- `cli/` — thin `typer` composition root
+- `presentation/` — user-facing delivery adapters, currently the `typer` CLI
 
 `outputs/snapshots/<as_of>.jsonl` is the canonical time-series substrate; reports are views over snapshot history.
 

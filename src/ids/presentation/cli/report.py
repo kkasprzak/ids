@@ -6,17 +6,17 @@ import typer
 from rich.console import Console
 
 from ids.application.weekly_snapshot import build_weekly_snapshot
-from ids.cli.constants import (
-    DEFAULT_REPORTS_DIR,
-    DEFAULT_SNAPSHOTS_DIR,
-    DEFAULT_XTB_INPUT_DIR,
-    IKZE_ACCOUNT_ID_ENV,
-)
 from ids.domain.errors import IDSError
 from ids.domain.timezones import WARSAW
 from ids.infrastructure.adapters.jsonl_snapshot_store import JSONLSnapshotStore
 from ids.infrastructure.adapters.markdown_report_writer import MarkdownReportWriter
 from ids.infrastructure.adapters.xtb_portfolio_loader import XTBPortfolioLoader
+from ids.presentation.cli.constants import (
+    DEFAULT_REPORTS_DIR,
+    DEFAULT_SNAPSHOTS_DIR,
+    DEFAULT_XTB_INPUT_DIR,
+    IKZE_ACCOUNT_ID_ENV,
+)
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console()

@@ -4,7 +4,7 @@ from decimal import ROUND_HALF_UP, getcontext
 
 import typer
 
-from ids.cli import report
+from ids.presentation.cli import report
 
 
 def _configure_decimal() -> None:
