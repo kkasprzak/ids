@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Protocol
 
 from ids.domain.errors import IDSError
@@ -20,3 +21,5 @@ class PortfolioLoader(Protocol):
     """Loads the most recent portfolio snapshot from the configured source."""
 
     def load_latest(self) -> PortfolioSnapshot: ...
+
+    def load_from_path(self, path: Path) -> PortfolioSnapshot: ...

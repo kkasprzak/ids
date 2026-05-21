@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from ids.application.weekly_snapshot import build_weekly_snapshot
+from ids.application.use_cases import generate_weekly_report
 from ids.domain.errors import IDSError
 from ids.domain.timezones import WARSAW
 from ids.infrastructure.adapters.jsonl_snapshot_store import JSONLSnapshotStore
@@ -63,26 +63,29 @@ def weekly(
             input_dir=DEFAULT_XTB_INPUT_DIR,
             ikze_account_id=ikze_account_id,
         )
-        snapshot = loader.load_from_path(export) if export else loader.load_latest()
+        store = JSONLSnapshotStore(DEFAULT_SNAPSHOTS_DIR)
+        writer = MarkdownReportWriter()
 
-        source_file = snapshot.source_id.removeprefix("xtb:")
+        result = generate_weekly_report(
+            loader=loader,
+            store=store,
+            writer=writer,
+            now=_clock(),
+            snapshot_dir=DEFAULT_SNAPSHOTS_DIR,
+            report_dir=DEFAULT_REPORTS_DIR,
+            export=export,
+        )
+        snapshot = result.snapshot
+
+        source_file = result.source_file
         console.print(f"[green]✓[/green] Loaded {source_file}")
         console.print(
             f"  Equity {snapshot.account.equity_pln} PLN · "
             f"{len(snapshot.positions)} open positions · "
             f"as of {snapshot.as_of_date.isoformat()}"
         )
-
-        store = JSONLSnapshotStore(DEFAULT_SNAPSHOTS_DIR)
-        store.save(snapshot)
-        snapshot_path = DEFAULT_SNAPSHOTS_DIR / f"{snapshot.as_of_date.isoformat()}.jsonl"
-        console.print(f"[green]✓[/green] Wrote {snapshot_path}")
-
-        view = build_weekly_snapshot(snapshot, now=_clock())
-        writer = MarkdownReportWriter()
-        report_path = DEFAULT_REPORTS_DIR / f"{snapshot.as_of_date.isoformat()}_weekly.md"
-        writer.write_weekly(view, str(report_path))
-        console.print(f"[green]✓[/green] Wrote {report_path}")
+        console.print(f"[green]✓[/green] Wrote {result.snapshot_path}")
+        console.print(f"[green]✓[/green] Wrote {result.report_path}")
 
     except IDSError as error:
         err_console.print(f"[red]✗[/red] {error}")
