@@ -47,7 +47,7 @@ def test_loss_greater_than_five_percent_gets_stop_loss_breach_alert(
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
     open_price = Decimal("100")
-    loss_beyond_strategy_threshold_pct = STOP_LOSS_PCT - Decimal("0.01")
+    loss_beyond_strategy_threshold_pct = _pct_just_below(STOP_LOSS_PCT)
     position = make_position(
         id=7,
         symbol="LOSS.PL",
@@ -274,3 +274,7 @@ def _alerts_of_kind(alerts: tuple[Alert, ...], kind: AlertKind) -> tuple[Alert, 
 
 def _price_after_pct_move(open_price: Decimal, pct_move: Decimal) -> Decimal:
     return open_price * (Decimal("1") + pct_move / Decimal("100"))
+
+
+def _pct_just_below(threshold_pct: Decimal) -> Decimal:
+    return threshold_pct - Decimal("0.01")
