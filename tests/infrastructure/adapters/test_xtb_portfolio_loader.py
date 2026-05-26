@@ -101,6 +101,30 @@ def test_sl_set_in_xlsx_maps_to_decimal(tmp_path: Path) -> None:
     assert snapshot.positions[0].sl == Decimal("88.5")
 
 
+@pytest.mark.parametrize(
+    ("sl_value", "expected"),
+    [
+        (0, None),
+        (0.0, None),
+        (Decimal("0"), None),
+        ("0", None),
+        ("0.0", None),
+        ("", None),
+        ("   ", None),
+        (Decimal("101.25"), Decimal("101.25")),
+        ("101.25", Decimal("101.25")),
+    ],
+)
+def test_stop_loss_normalization_variants(
+    tmp_path: Path, sl_value: int | float | Decimal | str, expected: Decimal | None
+) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(input_dir, positions=[{"SL": sl_value}])
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.positions[0].sl == expected
+
+
 def test_fractional_volume_preserved_as_decimal(tmp_path: Path) -> None:
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, positions=[{"Volume": Decimal("5.9113")}])
@@ -480,5 +504,47 @@ def test_malformed_position_row_with_numeric_id_raises_error(tmp_path: Path) -> 
     ws.cell(row=9, column=15, value=0.0)
     wb.save(path)
 
-    with pytest.raises(PortfolioMalformedError):
+    with pytest.raises(PortfolioMalformedError, match=r"row 9, field `open_price`"):
+        _loader(tmp_path / "inputs").load_latest()
+
+
+def test_invalid_position_type_reports_row_and_field(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[{"Type": "NOT_A_POSITION_TYPE"}],
+    )
+
+    with pytest.raises(PortfolioMalformedError, match=r"row 8, field `type`"):
+        _loader(tmp_path / "inputs").load_latest()
+
+
+def test_invalid_open_time_reports_row_and_field(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[{"Open time": "NOT_A_DATETIME"}],
+    )
+
+    with pytest.raises(PortfolioMalformedError, match=r"row 8, field `open_time`"):
+        _loader(tmp_path / "inputs").load_latest()
+
+
+def test_missing_numeric_cell_reports_row_and_field(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[{"Open price": None}],
+    )
+
+    with pytest.raises(PortfolioMalformedError, match=r"row 8, field `open_price`"):
         _loader(tmp_path / "inputs").load_latest()

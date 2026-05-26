@@ -113,7 +113,7 @@ Updating a golden file is always a deliberate human action: regenerate, review t
 
 ## Coverage
 
-Coverage is informational only. It is run in CI as `pytest --cov=ids` but does not gate the build. The real measure is: would a test fail if this decision branch were deleted? That is a code review judgment, not a metric.
+Coverage is informational only. `pytest-cov` is available for local inspection, but CI does not run a coverage stage today. The real measure is: would a test fail if this decision branch were deleted? That is a code review judgment, not a metric.
 
 ## CI Pipeline
 

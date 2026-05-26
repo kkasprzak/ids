@@ -234,30 +234,94 @@ class XTBPortfolioLoader(PortfolioLoader):
         # without requiring a hardcoded alias list. Empty cells (None) are spacer rows.
         # Numeric rows that have bad values in other fields still raise PortfolioMalformedError.
         positions: list[Position] = []
-        for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
+        for row_idx, row in enumerate(
+            sheet.iter_rows(min_row=header_row_idx + 1, values_only=True),
+            start=header_row_idx + 1,
+        ):
             first = row[columns["position_id"]] if columns["position_id"] < len(row) else None
             if first is None:
                 continue
             if not isinstance(first, int | float):
                 break
-            positions.append(self._row_to_position(row, columns))
+            positions.append(self._row_to_position(row, columns, row_idx))
         return positions
 
-    def _row_to_position(self, row: tuple[Any, ...], columns: dict[str, int]) -> Position:
-        sl_raw = row[columns["sl"]]
-        sl = None if sl_raw in (None, 0, 0.0) else _cell_to_decimal(sl_raw)
+    def _row_to_position(
+        self, row: tuple[Any, ...], columns: dict[str, int], row_idx: int
+    ) -> Position:
+        position_id_raw = self._row_cell(row, columns, row_idx, "position_id")
+        symbol_raw = self._row_cell(row, columns, row_idx, "symbol")
+        type_raw = self._row_cell(row, columns, row_idx, "type")
+        volume_raw = self._row_cell(row, columns, row_idx, "volume")
+        open_time_raw = self._row_cell(row, columns, row_idx, "open_time")
+        open_price_raw = self._row_cell(row, columns, row_idx, "open_price")
+        market_price_raw = self._row_cell(row, columns, row_idx, "market_price")
+        purchase_value_raw = self._row_cell(row, columns, row_idx, "purchase_value")
+        gross_pl_raw = self._row_cell(row, columns, row_idx, "gross_pl")
+        sl_raw = self._row_cell(row, columns, row_idx, "sl")
+
+        try:
+            position_type = PositionType(type_raw)
+        except Exception as exc:
+            raise _position_row_error(row_idx, "type", type_raw, exc) from exc
+        try:
+            volume = _cell_to_decimal(volume_raw)
+        except Exception as exc:
+            raise _position_row_error(row_idx, "volume", volume_raw, exc) from exc
+        try:
+            open_time = _naive_dt_to_warsaw(open_time_raw)
+        except Exception as exc:
+            raise _position_row_error(row_idx, "open_time", open_time_raw, exc) from exc
+        try:
+            open_price = _cell_to_decimal(open_price_raw)
+        except Exception as exc:
+            raise _position_row_error(row_idx, "open_price", open_price_raw, exc) from exc
+        try:
+            market_price = _cell_to_decimal(market_price_raw)
+        except Exception as exc:
+            raise _position_row_error(row_idx, "market_price", market_price_raw, exc) from exc
+        try:
+            purchase_value = _cell_to_decimal(purchase_value_raw)
+        except Exception as exc:
+            raise _position_row_error(row_idx, "purchase_value", purchase_value_raw, exc) from exc
+        try:
+            gross_pl = _cell_to_decimal(gross_pl_raw)
+        except Exception as exc:
+            raise _position_row_error(row_idx, "gross_pl", gross_pl_raw, exc) from exc
+
+        try:
+            sl = _normalize_stop_loss(sl_raw)
+        except Exception as exc:
+            raise _position_row_error(row_idx, "sl", sl_raw, exc) from exc
+
+        try:
+            position_id = int(position_id_raw)
+        except Exception as exc:
+            raise _position_row_error(row_idx, "position_id", position_id_raw, exc) from exc
+
         return Position(
-            id=int(row[columns["position_id"]]),
-            symbol=str(row[columns["symbol"]]),
-            type=PositionType(row[columns["type"]]),
-            volume=_cell_to_decimal(row[columns["volume"]]),
-            open_time=_naive_dt_to_warsaw(row[columns["open_time"]]),
-            open_price=_cell_to_decimal(row[columns["open_price"]]),
-            market_price=_cell_to_decimal(row[columns["market_price"]]),
-            purchase_value_pln=_cell_to_decimal(row[columns["purchase_value"]]),
-            gross_pl_pln=_cell_to_decimal(row[columns["gross_pl"]]),
+            id=position_id,
+            symbol=str(symbol_raw),
+            type=position_type,
+            volume=volume,
+            open_time=open_time,
+            open_price=open_price,
+            market_price=market_price,
+            purchase_value_pln=purchase_value,
+            gross_pl_pln=gross_pl,
             sl=sl,
         )
+
+    def _row_cell(
+        self, row: tuple[Any, ...], columns: dict[str, int], row_idx: int, logical_field: str
+    ) -> Any:
+        col_idx = columns[logical_field]
+        if col_idx >= len(row):
+            raise PortfolioMalformedError(
+                f"Malformed open-position row {row_idx}: missing field `{logical_field}` "
+                f"at expected column index {col_idx}."
+            )
+        return row[col_idx]
 
     def _as_of_date_from_export_datetime(self, path: Path) -> date:
         message_prefix = (
@@ -347,3 +411,24 @@ def _find_export_datetime(sheet: Worksheet) -> datetime:
     raise PortfolioMalformedError(
         f"Could not find export datetime in first {_EXPORT_DATETIME_SCAN_ROWS} rows."
     )
+
+
+def _position_row_error(
+    row_idx: int, field_name: str, value: Any, exc: Exception
+) -> PortfolioMalformedError:
+    return PortfolioMalformedError(
+        f"Malformed open-position row {row_idx}, field `{field_name}` "
+        f"(value={value!r}, type={type(value).__name__}): {exc}"
+    )
+
+
+def _normalize_stop_loss(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped == "":
+            return None
+        value = stripped
+    decimal_value = _cell_to_decimal(value)
+    return None if decimal_value == 0 else decimal_value

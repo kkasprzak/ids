@@ -164,4 +164,4 @@ tests/
 ## Quality gates
 
 - **Pre-commit hooks** run `ruff check` and `ruff format` on staged files. Type checks and tests are not in pre-commit (they run in CI).
-- **CI (GitHub Actions)** runs on every push: `ruff check`, `ruff format --check`, `pyright`, `pytest --cov`.
+- **CI (GitHub Actions)** runs on every push: `ruff check`, `ruff format --check`, `pyright`, `pytest -m unit`, `pytest`.

@@ -16,7 +16,7 @@ This document lists the languages, libraries, and tools the Investment Decision 
 |---------|---------|
 | CLI framework | `typer` |
 | Tabular analytics | `pandas` |
-| XLSX parsing | `openpyxl` (transitive via `pandas`) |
+| XLSX parsing | `openpyxl` (direct dependency) |
 | Charts | `matplotlib` |
 | YAML parsing | `PyYAML` |
 | Frontmatter handling | `python-frontmatter` |
