@@ -6,6 +6,7 @@ import pytest
 from ids.domain.compliance_alerts import evaluate_compliance_alerts
 from ids.domain.enums import AlertKind, AlertSeverity, PositionType
 from ids.domain.models import AccountSummary, Alert, PortfolioSnapshot, Position
+from ids.domain.strategy_rules import STOP_LOSS_PCT
 
 pytestmark = pytest.mark.unit
 
@@ -45,11 +46,13 @@ def test_loss_greater_than_five_percent_gets_stop_loss_breach_alert(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
+    open_price = Decimal("100")
+    loss_beyond_strategy_threshold_pct = STOP_LOSS_PCT - Decimal("0.01")
     position = make_position(
         id=7,
         symbol="LOSS.PL",
-        open_price=Decimal("100"),
-        market_price=Decimal("94.99"),
+        open_price=open_price,
+        market_price=_price_after_pct_move(open_price, loss_beyond_strategy_threshold_pct),
         sl=Decimal("95"),
     )
     snapshot = make_snapshot(positions=(position,))
@@ -62,7 +65,7 @@ def test_loss_greater_than_five_percent_gets_stop_loss_breach_alert(
             severity=AlertSeverity.ACTION_REQUIRED,
             position_id=7,
             symbol="LOSS.PL",
-            measured_pct=Decimal("-5.01"),
+            measured_pct=loss_beyond_strategy_threshold_pct,
             recommended_action="Close manually or set a protective stop in XTB.",
         ),
     )
@@ -267,3 +270,7 @@ def test_non_positive_equity_skips_cash_reserve_alert(
 
 def _alerts_of_kind(alerts: tuple[Alert, ...], kind: AlertKind) -> tuple[Alert, ...]:
     return tuple(alert for alert in alerts if alert.kind is kind)
+
+
+def _price_after_pct_move(open_price: Decimal, pct_move: Decimal) -> Decimal:
+    return open_price * (Decimal("1") + pct_move / Decimal("100"))
