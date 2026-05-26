@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
-from ids.domain.enums import PositionType
+from ids.domain.enums import AlertKind, AlertSeverity, PositionType
 
 
 @dataclass(frozen=True)
@@ -35,3 +35,13 @@ class PortfolioSnapshot:
     account: AccountSummary
     positions: tuple[Position, ...]
     schema_version: int = 1
+
+
+@dataclass(frozen=True)
+class Alert:
+    kind: AlertKind
+    severity: AlertSeverity
+    recommended_action: str
+    position_id: int | None = None
+    symbol: str | None = None
+    measured_pct: Decimal | None = None
