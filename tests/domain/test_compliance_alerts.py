@@ -10,14 +10,14 @@ from ids.domain.strategy_rules import STOP_LOSS_PCT
 
 pytestmark = pytest.mark.unit
 
-CONFIGURED_STOP_LOSS = Decimal("95")
+ANY_CONFIGURED_STOP_LOSS = Decimal("1")
 
 
 def test_position_with_stop_loss_has_no_missing_stop_loss_alert(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
-    snapshot = make_snapshot(positions=(make_position(sl=CONFIGURED_STOP_LOSS),))
+    snapshot = make_snapshot(positions=(make_position(sl=ANY_CONFIGURED_STOP_LOSS),))
 
     alerts = evaluate_compliance_alerts(snapshot)
 
@@ -44,7 +44,7 @@ def test_position_without_stop_loss_gets_missing_stop_loss_alert(
     )
 
 
-def test_loss_greater_than_five_percent_gets_stop_loss_breach_alert(
+def test_loss_beyond_strategy_threshold_gets_stop_loss_breach_alert(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
@@ -56,7 +56,7 @@ def test_loss_greater_than_five_percent_gets_stop_loss_breach_alert(
         open_price=open_price,
         market_price=open_price
         * (Decimal("1") + loss_beyond_strategy_threshold_pct / Decimal("100")),
-        sl=CONFIGURED_STOP_LOSS,
+        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     snapshot = make_snapshot(positions=(position,))
 
@@ -74,8 +74,14 @@ def test_loss_greater_than_five_percent_gets_stop_loss_breach_alert(
     )
 
 
-@pytest.mark.parametrize("market_price", [Decimal("95"), Decimal("105")])
-def test_loss_at_five_percent_or_profit_gets_no_stop_loss_breach_alert(
+@pytest.mark.parametrize(
+    "market_price",
+    [
+        Decimal("100") * (Decimal("1") + STOP_LOSS_PCT / Decimal("100")),
+        Decimal("105"),
+    ],
+)
+def test_loss_at_strategy_threshold_or_profit_gets_no_stop_loss_breach_alert(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
     market_price: Decimal,
@@ -83,7 +89,7 @@ def test_loss_at_five_percent_or_profit_gets_no_stop_loss_breach_alert(
     position = make_position(
         open_price=Decimal("100"),
         market_price=market_price,
-        sl=CONFIGURED_STOP_LOSS,
+        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     snapshot = make_snapshot(positions=(position,))
 
@@ -101,7 +107,7 @@ def test_profit_at_fifteen_percent_gets_profit_take_alert(
         symbol="WIN.PL",
         open_price=Decimal("100"),
         market_price=Decimal("115"),
-        sl=CONFIGURED_STOP_LOSS,
+        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     snapshot = make_snapshot(positions=(position,))
 
@@ -126,7 +132,7 @@ def test_profit_below_fifteen_percent_gets_no_profit_take_alert(
     position = make_position(
         open_price=Decimal("100"),
         market_price=Decimal("114.99"),
-        sl=CONFIGURED_STOP_LOSS,
+        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     snapshot = make_snapshot(positions=(position,))
 
@@ -194,14 +200,14 @@ def test_aggregation_returns_all_alerts(
         symbol="LOSS.PL",
         open_price=Decimal("100"),
         market_price=Decimal("90"),
-        sl=CONFIGURED_STOP_LOSS,
+        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     profit = make_position(
         id=3,
         symbol="PROFIT.PL",
         open_price=Decimal("100"),
         market_price=Decimal("120"),
-        sl=CONFIGURED_STOP_LOSS,
+        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     snapshot = make_snapshot(account=account, positions=(missing_sl, loss, profit))
 
@@ -224,7 +230,7 @@ def test_no_rule_violations_returns_no_alerts(
     position = make_position(
         open_price=Decimal("100"),
         market_price=Decimal("105"),
-        sl=CONFIGURED_STOP_LOSS,
+        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     snapshot = make_snapshot(account=account, positions=(position,))
 
@@ -239,7 +245,7 @@ def test_sell_position_uses_inverse_price_movement_for_threshold_alerts(
         type=PositionType.SELL,
         open_price=Decimal("100"),
         market_price=Decimal("84"),
-        sl=CONFIGURED_STOP_LOSS,
+        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     snapshot = make_snapshot(positions=(position,))
 
@@ -257,7 +263,7 @@ def test_zero_open_price_skips_price_threshold_alerts(
     position = make_position(
         open_price=Decimal("0"),
         market_price=Decimal("200"),
-        sl=CONFIGURED_STOP_LOSS,
+        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     snapshot = make_snapshot(positions=(position,))
 
