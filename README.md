@@ -21,12 +21,17 @@ Place XTB XLSX exports under `inputs/xtb_exports/` (gitignored). Reports and sna
 ## Development
 
 ```bash
-uv run pytest -n auto       # run tests in parallel
-uv run ruff check .         # lint
-uv run ruff format .        # format
-uv run pyright              # type-check (strict on src/)
-uv run pre-commit install   # enable git hooks
+uv run pytest -n auto                # run tests in parallel
+uv run pytest                        # run the same test suite CI runs
+uv run pytest --cov=ids --cov-report=term-missing --cov-report=html
+uv run ruff check .                  # lint
+uv run ruff format .                 # format
+uv run pyright                       # type-check (strict on src/)
+uv run pre-commit install            # enable git hooks
 ```
+
+The HTML coverage report is written to `htmlcov/index.html`. Coverage is informational only;
+CI runs tests without a coverage gate.
 
 ## Architecture
 
