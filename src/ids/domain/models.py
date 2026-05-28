@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
-from ids.domain.enums import PositionType
+from ids.domain.enums import AlertKind, AlertSeverity, PositionType
 
 
 @dataclass(frozen=True)
@@ -12,6 +12,9 @@ class AccountSummary:
     balance_pln: Decimal
     equity_pln: Decimal
     export_datetime: datetime
+
+    def __post_init__(self) -> None:
+        _require_positive_decimal("AccountSummary", "equity_pln", self.equity_pln)
 
 
 @dataclass(frozen=True)
@@ -27,6 +30,10 @@ class Position:
     gross_pl_pln: Decimal
     sl: Decimal | None
 
+    def __post_init__(self) -> None:
+        _require_positive_decimal("Position", "open_price", self.open_price)
+        _require_positive_decimal("Position", "market_price", self.market_price)
+
 
 @dataclass(frozen=True)
 class PortfolioSnapshot:
@@ -35,3 +42,18 @@ class PortfolioSnapshot:
     account: AccountSummary
     positions: tuple[Position, ...]
     schema_version: int = 1
+
+
+@dataclass(frozen=True)
+class Alert:
+    kind: AlertKind
+    severity: AlertSeverity
+    recommended_action: str
+    position_id: int | None = None
+    symbol: str | None = None
+    measured_pct: Decimal | None = None
+
+
+def _require_positive_decimal(model_name: str, field_name: str, value: Decimal) -> None:
+    if value <= 0:
+        raise ValueError(f"{model_name}.{field_name} must be positive")
