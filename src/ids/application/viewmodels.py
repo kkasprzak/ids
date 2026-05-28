@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
+from ids.domain.enums import AlertKind, AlertSeverity
+
 
 @dataclass(frozen=True)
 class PositionRow:
@@ -16,6 +18,17 @@ class PositionRow:
     market_price: Decimal
     pnl_pln: Decimal
     pnl_pct: Decimal
+    has_alert: bool = False
+
+
+@dataclass(frozen=True)
+class AlertView:
+    kind: AlertKind
+    severity: AlertSeverity
+    recommended_action: str
+    position_id: int | None = None
+    symbol: str | None = None
+    measured_pct: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -28,3 +41,4 @@ class WeeklySnapshotView:
     cash_pct: Decimal
     open_positions_count: int
     rows: tuple[PositionRow, ...]
+    alerts: tuple[AlertView, ...] = ()

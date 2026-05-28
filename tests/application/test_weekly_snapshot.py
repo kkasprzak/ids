@@ -6,12 +6,14 @@ import pytest
 
 from ids.application.viewmodels import PositionRow, WeeklySnapshotView
 from ids.application.weekly_snapshot import build_weekly_snapshot
+from ids.domain.enums import AlertKind, AlertSeverity
 from ids.domain.models import AccountSummary, PortfolioSnapshot, Position
 from ids.domain.timezones import WARSAW
 
 pytestmark = pytest.mark.unit
 
 FIXED_NOW = datetime(2026, 5, 12, 18, 30, tzinfo=WARSAW)
+EXPECTED_ALERT_COUNT = 4
 
 
 def _weekly_view(snapshot: PortfolioSnapshot) -> WeeklySnapshotView:
@@ -31,6 +33,7 @@ def test_empty_portfolio_returns_zero_count_and_empty_rows(
 
     assert view.open_positions_count == 0
     assert view.rows == ()
+    assert view.alerts == ()
 
 
 def test_single_position_basic_fields_propagated(
@@ -174,3 +177,72 @@ def test_same_day_open_has_zero_days_held(
     view = build_weekly_snapshot(snapshot, now=datetime(2026, 5, 1, 12, 0, tzinfo=WARSAW))
 
     assert _first_row(view).days_held == 0
+
+
+def test_alerts_are_included_in_view_model(
+    make_snapshot: Callable[..., PortfolioSnapshot],
+    make_position: Callable[..., Position],
+    make_account: Callable[..., AccountSummary],
+) -> None:
+    account = make_account(balance=Decimal("50"), equity=Decimal("1000"))
+    breach = make_position(
+        id=7,
+        symbol="BREACH.PL",
+        open_price=Decimal("100"),
+        market_price=Decimal("89"),
+        sl=Decimal("95"),
+    )
+    no_sl = make_position(id=8, symbol="NOSL.PL", sl=None)
+    take_profit = make_position(
+        id=9,
+        symbol="TAKE.PL",
+        open_price=Decimal("100"),
+        market_price=Decimal("116"),
+        sl=Decimal("90"),
+    )
+    snapshot = make_snapshot(account=account, positions=(breach, no_sl, take_profit))
+
+    view = _weekly_view(snapshot)
+
+    assert len(view.alerts) == EXPECTED_ALERT_COUNT
+    assert tuple(alert.kind for alert in view.alerts) == (
+        AlertKind.STOP_LOSS_BREACH,
+        AlertKind.MISSING_STOP_LOSS,
+        AlertKind.PROFIT_TAKE_OPPORTUNITY,
+        AlertKind.CASH_RESERVE_BELOW_MINIMUM,
+    )
+    assert tuple(alert.severity for alert in view.alerts) == (
+        AlertSeverity.ACTION_REQUIRED,
+        AlertSeverity.WARNING,
+        AlertSeverity.WARNING,
+        AlertSeverity.WARNING,
+    )
+
+
+def test_rows_flagged_only_for_positions_with_position_alerts(
+    make_snapshot: Callable[..., PortfolioSnapshot],
+    make_position: Callable[..., Position],
+    make_account: Callable[..., AccountSummary],
+) -> None:
+    account = make_account(balance=Decimal("50"), equity=Decimal("1000"))
+    flagged = make_position(
+        id=101,
+        symbol="FLAGGED.PL",
+        open_price=Decimal("100"),
+        market_price=Decimal("89"),
+        sl=Decimal("95"),
+    )
+    unflagged = make_position(
+        id=102,
+        symbol="OK.PL",
+        purchase_value_pln=Decimal("100"),
+        gross_pl_pln=Decimal("1"),
+        sl=Decimal("90"),
+    )
+    snapshot = make_snapshot(account=account, positions=(flagged, unflagged))
+
+    view = _weekly_view(snapshot)
+
+    row_flags = {row.symbol: row.has_alert for row in view.rows}
+    assert row_flags["FLAGGED.PL"] is True
+    assert row_flags["OK.PL"] is False
