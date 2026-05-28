@@ -36,7 +36,7 @@ def make_position(  # noqa: PLR0913
     market_price: Decimal = Decimal("100"),
     purchase_value_pln: Decimal = Decimal("1000"),
     gross_pl_pln: Decimal = Decimal("0"),
-    sl: Decimal | None = None,
+    sl: Decimal | None = Decimal("10"),
 ) -> Position:
     position_open_time = open_time or datetime(2026, 1, 1, 9, 0, tzinfo=WARSAW)
     return Position(

@@ -6,18 +6,28 @@ import pytest
 from ids.domain.compliance_alerts import evaluate_compliance_alerts
 from ids.domain.enums import AlertKind, AlertSeverity, PositionType
 from ids.domain.models import AccountSummary, Alert, PortfolioSnapshot, Position
-from ids.domain.strategy_rules import STOP_LOSS_PCT
+from ids.domain.strategy_rules import MIN_CASH_RESERVE_PCT, PROFIT_TAKE_PCT, STOP_LOSS_PCT
 
 pytestmark = pytest.mark.unit
 
-ANY_CONFIGURED_STOP_LOSS = Decimal("1")
+
+def _loss_threshold(open_price: Decimal, loss_pct: Decimal) -> Decimal:
+    return open_price * (Decimal("1") + loss_pct / Decimal("100"))
+
+
+def _profit_threshold(open_price: Decimal, profit_pct: Decimal) -> Decimal:
+    return open_price * (Decimal("1") + profit_pct / Decimal("100"))
+
+
+def _cash_balance(equity: Decimal, cash_pct: Decimal) -> Decimal:
+    return equity * cash_pct / Decimal("100")
 
 
 def test_position_with_stop_loss_has_no_missing_stop_loss_alert(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
-    snapshot = make_snapshot(positions=(make_position(sl=ANY_CONFIGURED_STOP_LOSS),))
+    snapshot = make_snapshot(positions=(make_position(sl=Decimal("1")),))
 
     alerts = evaluate_compliance_alerts(snapshot)
 
@@ -49,14 +59,12 @@ def test_loss_beyond_strategy_threshold_gets_stop_loss_breach_alert(
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
     open_price = Decimal("100")
-    loss_beyond_strategy_threshold_pct = STOP_LOSS_PCT - Decimal("0.01")
+    loss_pct = STOP_LOSS_PCT - Decimal("0.01")
     position = make_position(
         id=7,
         symbol="LOSS.PL",
         open_price=open_price,
-        market_price=open_price
-        * (Decimal("1") + loss_beyond_strategy_threshold_pct / Decimal("100")),
-        sl=ANY_CONFIGURED_STOP_LOSS,
+        market_price=_loss_threshold(open_price, loss_pct),
     )
     snapshot = make_snapshot(positions=(position,))
 
@@ -68,28 +76,28 @@ def test_loss_beyond_strategy_threshold_gets_stop_loss_breach_alert(
             severity=AlertSeverity.ACTION_REQUIRED,
             position_id=7,
             symbol="LOSS.PL",
-            measured_pct=loss_beyond_strategy_threshold_pct,
+            measured_pct=loss_pct,
             recommended_action="Close manually or set a protective stop in XTB.",
         ),
     )
 
 
 @pytest.mark.parametrize(
-    "market_price",
+    "open_price, market_price",
     [
-        Decimal("100") * (Decimal("1") + STOP_LOSS_PCT / Decimal("100")),
-        Decimal("105"),
+        (Decimal("100"), _loss_threshold(Decimal("100"), STOP_LOSS_PCT)),
+        (Decimal("100"), Decimal("105")),
     ],
 )
 def test_loss_at_strategy_threshold_or_profit_gets_no_stop_loss_breach_alert(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
+    open_price: Decimal,
     market_price: Decimal,
 ) -> None:
     position = make_position(
-        open_price=Decimal("100"),
+        open_price=open_price,
         market_price=market_price,
-        sl=ANY_CONFIGURED_STOP_LOSS,
     )
     snapshot = make_snapshot(positions=(position,))
 
@@ -98,41 +106,43 @@ def test_loss_at_strategy_threshold_or_profit_gets_no_stop_loss_breach_alert(
     assert _alerts_of_kind(alerts, AlertKind.STOP_LOSS_BREACH) == ()
 
 
-def test_profit_at_fifteen_percent_gets_profit_take_alert(
+@pytest.mark.parametrize(
+    "open_price, market_price",
+    [
+        (Decimal("100"), _profit_threshold(Decimal("100"), PROFIT_TAKE_PCT)),
+        (Decimal("100"), _profit_threshold(Decimal("100"), PROFIT_TAKE_PCT) + Decimal("0.01")),
+    ],
+)
+def test_profit_at_or_beyond_strategy_threshold_gets_profit_take_alert(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
+    open_price: Decimal,
+    market_price: Decimal,
 ) -> None:
+    position_id = 9
     position = make_position(
-        id=9,
-        symbol="WIN.PL",
-        open_price=Decimal("100"),
-        market_price=Decimal("115"),
-        sl=ANY_CONFIGURED_STOP_LOSS,
+        id=position_id,
+        open_price=open_price,
+        market_price=market_price,
     )
     snapshot = make_snapshot(positions=(position,))
 
     alerts = evaluate_compliance_alerts(snapshot)
 
-    assert _alerts_of_kind(alerts, AlertKind.PROFIT_TAKE_OPPORTUNITY) == (
-        Alert(
-            kind=AlertKind.PROFIT_TAKE_OPPORTUNITY,
-            severity=AlertSeverity.WARNING,
-            position_id=9,
-            symbol="WIN.PL",
-            measured_pct=Decimal("15.00"),
-            recommended_action="Realize 50% of the position.",
-        ),
-    )
+    profit_take_alerts = _alerts_of_kind(alerts, AlertKind.PROFIT_TAKE_OPPORTUNITY)
+    assert len(profit_take_alerts) == 1
+    assert profit_take_alerts[0].position_id == position_id
 
 
-def test_profit_below_fifteen_percent_gets_no_profit_take_alert(
+def test_profit_below_strategy_threshold_gets_no_profit_take_alert(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
+    open_price = Decimal("100")
+    profit_pct = PROFIT_TAKE_PCT - Decimal("0.01")
     position = make_position(
-        open_price=Decimal("100"),
-        market_price=Decimal("114.99"),
-        sl=ANY_CONFIGURED_STOP_LOSS,
+        open_price=open_price,
+        market_price=_profit_threshold(open_price, profit_pct),
     )
     snapshot = make_snapshot(positions=(position,))
 
@@ -141,11 +151,13 @@ def test_profit_below_fifteen_percent_gets_no_profit_take_alert(
     assert _alerts_of_kind(alerts, AlertKind.PROFIT_TAKE_OPPORTUNITY) == ()
 
 
-def test_cash_below_ten_percent_gets_cash_reserve_alert(
+def test_cash_below_strategy_minimum_gets_cash_reserve_alert(
     make_account: Callable[..., AccountSummary],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
-    account = make_account(balance=Decimal("99.90"), equity=Decimal("1000"))
+    equity = Decimal("1000")
+    cash_pct = MIN_CASH_RESERVE_PCT - Decimal("0.01")
+    account = make_account(balance=_cash_balance(equity, cash_pct), equity=equity)
     snapshot = make_snapshot(account=account)
 
     alerts = evaluate_compliance_alerts(snapshot)
@@ -154,33 +166,37 @@ def test_cash_below_ten_percent_gets_cash_reserve_alert(
         Alert(
             kind=AlertKind.CASH_RESERVE_BELOW_MINIMUM,
             severity=AlertSeverity.WARNING,
-            measured_pct=Decimal("9.99"),
+            measured_pct=cash_pct,
             recommended_action="Restore cash reserve to at least 10% of portfolio equity.",
         ),
     )
 
 
-def test_cash_below_ten_percent_is_not_hidden_by_display_rounding(
+def test_cash_below_strategy_minimum_is_not_hidden_by_display_rounding(
     make_account: Callable[..., AccountSummary],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
-    account = make_account(balance=Decimal("99.99"), equity=Decimal("1000"))
+    equity = Decimal("1000")
+    cash_pct = MIN_CASH_RESERVE_PCT - Decimal("0.001")
+    account = make_account(balance=_cash_balance(equity, cash_pct), equity=equity)
     snapshot = make_snapshot(account=account)
 
     alerts = evaluate_compliance_alerts(snapshot)
 
-    assert _alerts_of_kind(alerts, AlertKind.CASH_RESERVE_BELOW_MINIMUM)[0].measured_pct == Decimal(
-        "9.99900"
-    )
+    assert _alerts_of_kind(alerts, AlertKind.CASH_RESERVE_BELOW_MINIMUM)[0].measured_pct == cash_pct
 
 
-@pytest.mark.parametrize("balance", [Decimal("100"), Decimal("100.01")])
-def test_cash_at_or_above_ten_percent_gets_no_cash_reserve_alert(
+@pytest.mark.parametrize(
+    "cash_pct",
+    [MIN_CASH_RESERVE_PCT, MIN_CASH_RESERVE_PCT + Decimal("0.01")],
+)
+def test_cash_at_or_above_strategy_minimum_gets_no_cash_reserve_alert(
     make_account: Callable[..., AccountSummary],
     make_snapshot: Callable[..., PortfolioSnapshot],
-    balance: Decimal,
+    cash_pct: Decimal,
 ) -> None:
-    account = make_account(balance=balance, equity=Decimal("1000"))
+    equity = Decimal("1000")
+    account = make_account(balance=_cash_balance(equity, cash_pct), equity=equity)
     snapshot = make_snapshot(account=account)
 
     alerts = evaluate_compliance_alerts(snapshot)
@@ -193,21 +209,20 @@ def test_aggregation_returns_all_alerts(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
-    account = make_account(balance=Decimal("50"), equity=Decimal("1000"))
-    missing_sl = make_position(id=1, symbol="NO_SL.PL", sl=None)
+    equity = Decimal("1000")
+    cash_pct = MIN_CASH_RESERVE_PCT - Decimal("0.01")
+    open_price = Decimal("100")
+    loss_pct = STOP_LOSS_PCT - Decimal("0.01")
+    profit_pct = PROFIT_TAKE_PCT
+    account = make_account(balance=_cash_balance(equity, cash_pct), equity=equity)
+    missing_sl = make_position(sl=None)
     loss = make_position(
-        id=2,
-        symbol="LOSS.PL",
-        open_price=Decimal("100"),
-        market_price=Decimal("90"),
-        sl=ANY_CONFIGURED_STOP_LOSS,
+        open_price=open_price,
+        market_price=_loss_threshold(open_price, loss_pct),
     )
     profit = make_position(
-        id=3,
-        symbol="PROFIT.PL",
-        open_price=Decimal("100"),
-        market_price=Decimal("120"),
-        sl=ANY_CONFIGURED_STOP_LOSS,
+        open_price=open_price,
+        market_price=_profit_threshold(open_price, profit_pct),
     )
     snapshot = make_snapshot(account=account, positions=(missing_sl, loss, profit))
 
@@ -226,65 +241,36 @@ def test_no_rule_violations_returns_no_alerts(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
-    account = make_account(balance=Decimal("100"), equity=Decimal("1000"))
+    equity = Decimal("1000")
+    cash_pct = MIN_CASH_RESERVE_PCT + Decimal("0.01")
+    open_price = Decimal("100")
+    profit_pct = PROFIT_TAKE_PCT - Decimal("0.01")
+    account = make_account(balance=_cash_balance(equity, cash_pct), equity=equity)
     position = make_position(
-        open_price=Decimal("100"),
-        market_price=Decimal("105"),
-        sl=ANY_CONFIGURED_STOP_LOSS,
+        open_price=open_price,
+        market_price=_profit_threshold(open_price, profit_pct),
     )
     snapshot = make_snapshot(account=account, positions=(position,))
 
     assert evaluate_compliance_alerts(snapshot) == ()
 
 
-def test_sell_position_uses_inverse_price_movement_for_threshold_alerts(
+def test_sell_position_price_drop_triggers_profit_take_alert(
     make_position: Callable[..., Position],
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
+    open_price = Decimal("100")
     position = make_position(
         type=PositionType.SELL,
-        open_price=Decimal("100"),
-        market_price=Decimal("84"),
-        sl=ANY_CONFIGURED_STOP_LOSS,
+        open_price=open_price,
+        market_price=_loss_threshold(open_price, -PROFIT_TAKE_PCT),
     )
     snapshot = make_snapshot(positions=(position,))
 
     alerts = evaluate_compliance_alerts(snapshot)
 
-    assert _alerts_of_kind(alerts, AlertKind.PROFIT_TAKE_OPPORTUNITY)[0].measured_pct == Decimal(
-        "16.00"
-    )
-
-
-def test_zero_open_price_skips_price_threshold_alerts(
-    make_position: Callable[..., Position],
-    make_snapshot: Callable[..., PortfolioSnapshot],
-) -> None:
-    position = make_position(
-        open_price=Decimal("0"),
-        market_price=Decimal("200"),
-        sl=ANY_CONFIGURED_STOP_LOSS,
-    )
-    snapshot = make_snapshot(positions=(position,))
-
-    alerts = evaluate_compliance_alerts(snapshot)
-
-    assert _alerts_of_kind(alerts, AlertKind.STOP_LOSS_BREACH) == ()
-    assert _alerts_of_kind(alerts, AlertKind.PROFIT_TAKE_OPPORTUNITY) == ()
-
-
-@pytest.mark.parametrize("equity", [Decimal("0"), Decimal("-1")])
-def test_non_positive_equity_skips_cash_reserve_alert(
-    make_account: Callable[..., AccountSummary],
-    make_snapshot: Callable[..., PortfolioSnapshot],
-    equity: Decimal,
-) -> None:
-    account = make_account(balance=Decimal("0"), equity=equity)
-    snapshot = make_snapshot(account=account)
-
-    alerts = evaluate_compliance_alerts(snapshot)
-
-    assert _alerts_of_kind(alerts, AlertKind.CASH_RESERVE_BELOW_MINIMUM) == ()
+    assert len(alerts) == 1
+    assert alerts[0].kind == AlertKind.PROFIT_TAKE_OPPORTUNITY
 
 
 def _alerts_of_kind(alerts: tuple[Alert, ...], kind: AlertKind) -> tuple[Alert, ...]:

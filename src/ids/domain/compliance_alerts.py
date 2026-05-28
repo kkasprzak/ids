@@ -25,8 +25,8 @@ def evaluate_compliance_alerts(snapshot: PortfolioSnapshot) -> tuple[Alert, ...]
     for position in snapshot.positions:
         alerts.extend(_position_alerts(position))
 
-    cash_pct = _pct_or_none(snapshot.account.balance_pln, snapshot.account.equity_pln)
-    if cash_pct is not None and cash_pct < MIN_CASH_RESERVE_PCT:
+    cash_pct = _pct(snapshot.account.balance_pln, snapshot.account.equity_pln)
+    if cash_pct < MIN_CASH_RESERVE_PCT:
         alerts.append(
             Alert(
                 kind=AlertKind.CASH_RESERVE_BELOW_MINIMUM,
@@ -54,8 +54,6 @@ def _position_alerts(position: Position) -> tuple[Alert, ...]:
         )
 
     pnl_pct = _position_pnl_pct(position)
-    if pnl_pct is None:
-        return tuple(alerts)
 
     if pnl_pct < STOP_LOSS_PCT:
         alerts.append(
@@ -84,10 +82,7 @@ def _position_alerts(position: Position) -> tuple[Alert, ...]:
     return tuple(alerts)
 
 
-def _position_pnl_pct(position: Position) -> Decimal | None:
-    if position.open_price == 0:
-        return None
-
+def _position_pnl_pct(position: Position) -> Decimal:
     price_delta = position.market_price - position.open_price
     if position.type is PositionType.SELL:
         price_delta = -price_delta
@@ -95,7 +90,5 @@ def _position_pnl_pct(position: Position) -> Decimal | None:
     return price_delta / position.open_price * HUNDRED
 
 
-def _pct_or_none(numerator: Decimal, denominator: Decimal) -> Decimal | None:
-    if denominator <= 0:
-        return None
+def _pct(numerator: Decimal, denominator: Decimal) -> Decimal:
     return numerator / denominator * HUNDRED

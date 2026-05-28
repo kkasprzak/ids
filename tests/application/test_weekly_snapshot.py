@@ -92,20 +92,17 @@ def test_cash_pct_computation(
     assert view.cash_pct == Decimal("25.00")
 
 
-def test_division_guards_dont_raise(
+def test_position_purchase_value_zero_pnl_pct_returns_zero(
     make_snapshot: Callable[..., PortfolioSnapshot],
     make_position: Callable[..., Position],
-    make_account: Callable[..., AccountSummary],
 ) -> None:
     position = make_position(purchase_value_pln=Decimal("0"), gross_pl_pln=Decimal("100"))
     snapshot = make_snapshot(
-        account=make_account(balance=Decimal("1"), equity=Decimal("0")),
         positions=(position,),
     )
 
     view = _weekly_view(snapshot)
 
-    assert view.cash_pct == Decimal("0.00")
     assert _first_row(view).pnl_pct == Decimal("0.00")
 
 
