@@ -10,7 +10,7 @@ pytestmark = pytest.mark.unit
 POSITION_ID = 123
 
 
-def test_alert_view_factory_maps_domain_alert_fields() -> None:
+def test_alert_view_factory_maps_position_alert_fields() -> None:
     alert = Alert.stop_loss_breach(
         position_id=POSITION_ID,
         symbol="PKN.PL",
