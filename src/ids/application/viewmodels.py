@@ -5,6 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ids.domain.enums import AlertKind, AlertSeverity
+from ids.domain.models import Alert
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,17 @@ class AlertView:
     position_id: int | None = None
     symbol: str | None = None
     measured_pct: Decimal | None = None
+
+    @classmethod
+    def from_domain_alert(cls, alert: Alert) -> "AlertView":
+        return cls(
+            kind=alert.kind,
+            severity=alert.severity,
+            recommended_action=alert.recommended_action,
+            position_id=alert.position_id,
+            symbol=alert.symbol,
+            measured_pct=alert.measured_pct,
+        )
 
 
 @dataclass(frozen=True)

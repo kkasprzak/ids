@@ -50,17 +50,7 @@ def build_weekly_snapshot(
         )
 
     sorted_rows = tuple(sorted(rows, key=lambda row: (-row.pnl_pct, row.symbol)))
-    alert_views = tuple(
-        AlertView(
-            kind=alert.kind,
-            severity=alert.severity,
-            recommended_action=alert.recommended_action,
-            position_id=alert.position_id,
-            symbol=alert.symbol,
-            measured_pct=alert.measured_pct,
-        )
-        for alert in alerts
-    )
+    alert_views = tuple(AlertView.from_domain_alert(alert) for alert in alerts)
     return WeeklySnapshotView(
         as_of_date=snapshot.as_of_date,
         generated_at=now,

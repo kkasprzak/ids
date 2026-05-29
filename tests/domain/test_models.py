@@ -75,9 +75,9 @@ def test_alert_factory_methods_define_required_signatures() -> None:
     )
     cash = Alert.cash_reserve_below_minimum(measured_pct=Decimal("9.99"))
 
-    assert missing_sl.kind.value == "MISSING_STOP_LOSS"
-    assert breach.kind.value == "STOP_LOSS_BREACH"
-    assert profit.kind.value == "PROFIT_TAKE_OPPORTUNITY"
-    assert cash.kind.value == "CASH_RESERVE_BELOW_MINIMUM"
+    assert missing_sl.kind == AlertKind.MISSING_STOP_LOSS
+    assert breach.kind == AlertKind.STOP_LOSS_BREACH
+    assert profit.kind == AlertKind.PROFIT_TAKE_OPPORTUNITY
+    assert cash.kind == AlertKind.CASH_RESERVE_BELOW_MINIMUM
     assert missing_sl.is_position_alert() is True
     assert cash.is_portfolio_alert() is True
