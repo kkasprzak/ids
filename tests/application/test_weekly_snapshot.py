@@ -180,14 +180,14 @@ def test_same_day_open_has_zero_days_held(
 
 def test_alerts_are_included_in_view_model(
     make_snapshot: Callable[..., PortfolioSnapshot],
-    make_position: Callable[..., Position],
     make_account: Callable[..., AccountSummary],
     make_position_with_stop_loss_breach: Callable[..., Position],
     make_position_with_profit_take_opportunity: Callable[..., Position],
+    make_position_without_stop_loss: Callable[..., Position],
 ) -> None:
     account = make_account(balance=Decimal("50"), equity=Decimal("1000"))
     breach = make_position_with_stop_loss_breach(id=7, symbol="BREACH.PL")
-    no_sl = make_position(id=8, symbol="NOSL.PL", sl=None)
+    no_sl = make_position_without_stop_loss(id=8, symbol="NOSL.PL")
     take_profit = make_position_with_profit_take_opportunity(id=9, symbol="TAKE.PL")
     snapshot = make_snapshot(account=account, positions=(breach, no_sl, take_profit))
 

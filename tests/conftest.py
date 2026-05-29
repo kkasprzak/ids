@@ -110,6 +110,10 @@ def make_position_without_position_alerts(*, id: int, symbol: str) -> Position:
     )
 
 
+def make_position_without_stop_loss(*, id: int, symbol: str) -> Position:
+    return make_position(id=id, symbol=symbol, sl=None)
+
+
 @pytest.fixture(name="make_account")
 def make_account_factory() -> Callable[..., AccountSummary]:
     return make_account
@@ -138,3 +142,8 @@ def make_position_with_profit_take_opportunity_factory() -> Callable[..., Positi
 @pytest.fixture(name="make_position_without_position_alerts")
 def make_position_without_position_alerts_factory() -> Callable[..., Position]:
     return make_position_without_position_alerts
+
+
+@pytest.fixture(name="make_position_without_stop_loss")
+def make_position_without_stop_loss_factory() -> Callable[..., Position]:
+    return make_position_without_stop_loss
