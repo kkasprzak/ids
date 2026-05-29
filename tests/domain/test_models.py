@@ -65,3 +65,19 @@ def test_alert_classifies_position_and_portfolio_scope() -> None:
     assert position_alert.is_portfolio_alert() is False
     assert portfolio_alert.is_position_alert() is False
     assert portfolio_alert.is_portfolio_alert() is True
+
+
+def test_alert_factory_methods_define_required_signatures() -> None:
+    missing_sl = Alert.missing_stop_loss(position_id=1, symbol="AAA.PL")
+    breach = Alert.stop_loss_breach(position_id=2, symbol="BBB.PL", measured_pct=Decimal("-5.25"))
+    profit = Alert.profit_take_opportunity(
+        position_id=3, symbol="CCC.PL", measured_pct=Decimal("15.00")
+    )
+    cash = Alert.cash_reserve_below_minimum(measured_pct=Decimal("9.99"))
+
+    assert missing_sl.kind.value == "MISSING_STOP_LOSS"
+    assert breach.kind.value == "STOP_LOSS_BREACH"
+    assert profit.kind.value == "PROFIT_TAKE_OPPORTUNITY"
+    assert cash.kind.value == "CASH_RESERVE_BELOW_MINIMUM"
+    assert missing_sl.is_position_alert() is True
+    assert cash.is_portfolio_alert() is True
