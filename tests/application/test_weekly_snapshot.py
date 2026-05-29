@@ -13,7 +13,6 @@ from ids.domain.timezones import WARSAW
 pytestmark = pytest.mark.unit
 
 FIXED_NOW = datetime(2026, 5, 12, 18, 30, tzinfo=WARSAW)
-EXPECTED_ALERT_COUNT = 4
 
 
 def _weekly_view(snapshot: PortfolioSnapshot) -> WeeklySnapshotView:
@@ -204,7 +203,6 @@ def test_alerts_are_included_in_view_model(
 
     view = _weekly_view(snapshot)
 
-    assert len(view.alerts) == EXPECTED_ALERT_COUNT
     assert tuple(alert.kind for alert in view.alerts) == (
         AlertKind.STOP_LOSS_BREACH,
         AlertKind.MISSING_STOP_LOSS,
