@@ -3,7 +3,8 @@
 from datetime import datetime
 from decimal import Decimal
 
-from ids.application.viewmodels import PositionRow, WeeklySnapshotView
+from ids.application.viewmodels import AlertView, PositionRow, WeeklySnapshotView
+from ids.domain.compliance_alerts import evaluate_compliance_alerts
 from ids.domain.models import PortfolioSnapshot
 
 TWO_DP = Decimal("0.01")
@@ -23,6 +24,8 @@ def build_weekly_snapshot(
     now: datetime,
 ) -> WeeklySnapshotView:
     """Project a portfolio snapshot into a weekly report view model."""
+    alerts = evaluate_compliance_alerts(snapshot)
+    flagged_position_ids = {alert.position_id for alert in alerts if alert.is_position_alert()}
     equity_pln = snapshot.account.equity_pln
     cash_pln = snapshot.account.balance_pln
     cash_pct = _pct_or_zero(cash_pln, equity_pln)
@@ -42,10 +45,12 @@ def build_weekly_snapshot(
                 market_price=position.market_price,
                 pnl_pln=pnl_pln,
                 pnl_pct=pnl_pct,
+                has_alert=position.id in flagged_position_ids,
             )
         )
 
     sorted_rows = tuple(sorted(rows, key=lambda row: (-row.pnl_pct, row.symbol)))
+    alert_views = tuple(AlertView.from_domain_alert(alert) for alert in alerts)
     return WeeklySnapshotView(
         as_of_date=snapshot.as_of_date,
         generated_at=now,
@@ -55,4 +60,5 @@ def build_weekly_snapshot(
         cash_pct=cash_pct,
         open_positions_count=len(snapshot.positions),
         rows=sorted_rows,
+        alerts=alert_views,
     )

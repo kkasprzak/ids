@@ -53,6 +53,55 @@ class Alert:
     symbol: str | None = None
     measured_pct: Decimal | None = None
 
+    @classmethod
+    def missing_stop_loss(cls, *, position_id: int, symbol: str) -> "Alert":
+        return cls(
+            kind=AlertKind.MISSING_STOP_LOSS,
+            severity=AlertSeverity.WARNING,
+            recommended_action="Set a protective stop-loss in XTB.",
+            position_id=position_id,
+            symbol=symbol,
+        )
+
+    @classmethod
+    def stop_loss_breach(cls, *, position_id: int, symbol: str, measured_pct: Decimal) -> "Alert":
+        return cls(
+            kind=AlertKind.STOP_LOSS_BREACH,
+            severity=AlertSeverity.ACTION_REQUIRED,
+            recommended_action="Close manually or set a protective stop in XTB.",
+            position_id=position_id,
+            symbol=symbol,
+            measured_pct=measured_pct,
+        )
+
+    @classmethod
+    def profit_take_opportunity(
+        cls, *, position_id: int, symbol: str, measured_pct: Decimal
+    ) -> "Alert":
+        return cls(
+            kind=AlertKind.PROFIT_TAKE_OPPORTUNITY,
+            severity=AlertSeverity.WARNING,
+            recommended_action="Realize 50% of the position.",
+            position_id=position_id,
+            symbol=symbol,
+            measured_pct=measured_pct,
+        )
+
+    @classmethod
+    def cash_reserve_below_minimum(cls, *, measured_pct: Decimal) -> "Alert":
+        return cls(
+            kind=AlertKind.CASH_RESERVE_BELOW_MINIMUM,
+            severity=AlertSeverity.WARNING,
+            recommended_action="Restore cash reserve to at least 10% of portfolio equity.",
+            measured_pct=measured_pct,
+        )
+
+    def is_position_alert(self) -> bool:
+        return self.position_id is not None
+
+    def is_portfolio_alert(self) -> bool:
+        return self.position_id is None
+
 
 def _require_positive_decimal(model_name: str, field_name: str, value: Decimal) -> None:
     if value <= 0:

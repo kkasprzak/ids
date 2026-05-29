@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from ids.domain.enums import AlertKind, AlertSeverity, PositionType
+from ids.domain.enums import PositionType
 from ids.domain.models import Alert, PortfolioSnapshot, Position
 from ids.domain.strategy_rules import (
     MIN_CASH_RESERVE_PCT,
@@ -11,11 +11,6 @@ from ids.domain.strategy_rules import (
 )
 
 HUNDRED = Decimal("100")
-
-_MISSING_STOP_LOSS_ACTION = "Set a protective stop-loss in XTB."
-_STOP_LOSS_BREACH_ACTION = "Close manually or set a protective stop in XTB."
-_PROFIT_TAKE_ACTION = "Realize 50% of the position."
-_CASH_RESERVE_ACTION = "Restore cash reserve to at least 10% of portfolio equity."
 
 
 def evaluate_compliance_alerts(snapshot: PortfolioSnapshot) -> tuple[Alert, ...]:
@@ -27,14 +22,7 @@ def evaluate_compliance_alerts(snapshot: PortfolioSnapshot) -> tuple[Alert, ...]
 
     cash_pct = _pct(snapshot.account.balance_pln, snapshot.account.equity_pln)
     if cash_pct < MIN_CASH_RESERVE_PCT:
-        alerts.append(
-            Alert(
-                kind=AlertKind.CASH_RESERVE_BELOW_MINIMUM,
-                severity=AlertSeverity.WARNING,
-                measured_pct=cash_pct,
-                recommended_action=_CASH_RESERVE_ACTION,
-            )
-        )
+        alerts.append(Alert.cash_reserve_below_minimum(measured_pct=cash_pct))
 
     return tuple(alerts)
 
@@ -43,39 +31,25 @@ def _position_alerts(position: Position) -> tuple[Alert, ...]:
     alerts: list[Alert] = []
 
     if position.sl is None:
-        alerts.append(
-            Alert(
-                kind=AlertKind.MISSING_STOP_LOSS,
-                severity=AlertSeverity.WARNING,
-                position_id=position.id,
-                symbol=position.symbol,
-                recommended_action=_MISSING_STOP_LOSS_ACTION,
-            )
-        )
+        alerts.append(Alert.missing_stop_loss(position_id=position.id, symbol=position.symbol))
 
     pnl_pct = _position_pnl_pct(position)
 
     if pnl_pct < STOP_LOSS_PCT:
         alerts.append(
-            Alert(
-                kind=AlertKind.STOP_LOSS_BREACH,
-                severity=AlertSeverity.ACTION_REQUIRED,
+            Alert.stop_loss_breach(
                 position_id=position.id,
                 symbol=position.symbol,
                 measured_pct=pnl_pct,
-                recommended_action=_STOP_LOSS_BREACH_ACTION,
             )
         )
 
     if pnl_pct >= PROFIT_TAKE_PCT:
         alerts.append(
-            Alert(
-                kind=AlertKind.PROFIT_TAKE_OPPORTUNITY,
-                severity=AlertSeverity.WARNING,
+            Alert.profit_take_opportunity(
                 position_id=position.id,
                 symbol=position.symbol,
                 measured_pct=pnl_pct,
-                recommended_action=_PROFIT_TAKE_ACTION,
             )
         )
 

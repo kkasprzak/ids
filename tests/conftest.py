@@ -8,6 +8,7 @@ import pytest
 
 from ids.domain.enums import PositionType
 from ids.domain.models import AccountSummary, PortfolioSnapshot, Position
+from ids.domain.strategy_rules import PROFIT_TAKE_PCT, STOP_LOSS_PCT
 from ids.domain.timezones import WARSAW
 
 
@@ -69,6 +70,50 @@ def make_snapshot(
     )
 
 
+def _market_price_for_pnl_pct(open_price: Decimal, pnl_pct: Decimal) -> Decimal:
+    return open_price * (Decimal("1") + pnl_pct / Decimal("100"))
+
+
+def make_position_with_stop_loss_breach(*, id: int, symbol: str) -> Position:
+    open_price = Decimal("100")
+    breached_pct = STOP_LOSS_PCT - Decimal("0.01")
+    return make_position(
+        id=id,
+        symbol=symbol,
+        open_price=open_price,
+        market_price=_market_price_for_pnl_pct(open_price, breached_pct),
+        sl=Decimal("95"),
+    )
+
+
+def make_position_with_profit_take_opportunity(*, id: int, symbol: str) -> Position:
+    open_price = Decimal("100")
+    profitable_pct = PROFIT_TAKE_PCT + Decimal("0.01")
+    return make_position(
+        id=id,
+        symbol=symbol,
+        open_price=open_price,
+        market_price=_market_price_for_pnl_pct(open_price, profitable_pct),
+        sl=Decimal("90"),
+    )
+
+
+def make_position_without_position_alerts(*, id: int, symbol: str) -> Position:
+    open_price = Decimal("100")
+    neutral_pct = Decimal("1")
+    return make_position(
+        id=id,
+        symbol=symbol,
+        open_price=open_price,
+        market_price=_market_price_for_pnl_pct(open_price, neutral_pct),
+        sl=Decimal("90"),
+    )
+
+
+def make_position_without_stop_loss(*, id: int, symbol: str) -> Position:
+    return make_position(id=id, symbol=symbol, sl=None)
+
+
 @pytest.fixture(name="make_account")
 def make_account_factory() -> Callable[..., AccountSummary]:
     return make_account
@@ -82,3 +127,23 @@ def make_position_factory() -> Callable[..., Position]:
 @pytest.fixture(name="make_snapshot")
 def make_snapshot_factory() -> Callable[..., PortfolioSnapshot]:
     return make_snapshot
+
+
+@pytest.fixture(name="make_position_with_stop_loss_breach")
+def make_position_with_stop_loss_breach_factory() -> Callable[..., Position]:
+    return make_position_with_stop_loss_breach
+
+
+@pytest.fixture(name="make_position_with_profit_take_opportunity")
+def make_position_with_profit_take_opportunity_factory() -> Callable[..., Position]:
+    return make_position_with_profit_take_opportunity
+
+
+@pytest.fixture(name="make_position_without_position_alerts")
+def make_position_without_position_alerts_factory() -> Callable[..., Position]:
+    return make_position_without_position_alerts
+
+
+@pytest.fixture(name="make_position_without_stop_loss")
+def make_position_without_stop_loss_factory() -> Callable[..., Position]:
+    return make_position_without_stop_loss
