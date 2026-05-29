@@ -25,7 +25,7 @@ def build_weekly_snapshot(
 ) -> WeeklySnapshotView:
     """Project a portfolio snapshot into a weekly report view model."""
     alerts = evaluate_compliance_alerts(snapshot)
-    flagged_position_ids = {alert.position_id for alert in alerts if alert.position_id is not None}
+    flagged_position_ids = {alert.position_id for alert in alerts if alert.is_position_alert()}
     equity_pln = snapshot.account.equity_pln
     cash_pln = snapshot.account.balance_pln
     cash_pct = _pct_or_zero(cash_pln, equity_pln)

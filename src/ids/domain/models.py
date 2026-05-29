@@ -53,6 +53,12 @@ class Alert:
     symbol: str | None = None
     measured_pct: Decimal | None = None
 
+    def is_position_alert(self) -> bool:
+        return self.position_id is not None
+
+    def is_portfolio_alert(self) -> bool:
+        return self.position_id is None
+
 
 def _require_positive_decimal(model_name: str, field_name: str, value: Decimal) -> None:
     if value <= 0:
