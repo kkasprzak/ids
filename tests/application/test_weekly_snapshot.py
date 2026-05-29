@@ -8,57 +8,11 @@ from ids.application.viewmodels import PositionRow, WeeklySnapshotView
 from ids.application.weekly_snapshot import build_weekly_snapshot
 from ids.domain.enums import AlertKind, AlertSeverity
 from ids.domain.models import AccountSummary, PortfolioSnapshot, Position
-from ids.domain.strategy_rules import PROFIT_TAKE_PCT, STOP_LOSS_PCT
 from ids.domain.timezones import WARSAW
 
 pytestmark = pytest.mark.unit
 
 FIXED_NOW = datetime(2026, 5, 12, 18, 30, tzinfo=WARSAW)
-OPEN_PRICE = Decimal("100")
-PCT_BUFFER = Decimal("0.01")
-
-
-def _market_price_for_pnl_pct(open_price: Decimal, pnl_pct: Decimal) -> Decimal:
-    return open_price * (Decimal("1") + pnl_pct / Decimal("100"))
-
-
-def _position_with_stop_loss_breach(
-    make_position: Callable[..., Position], *, id: int, symbol: str
-) -> Position:
-    breached_pct = STOP_LOSS_PCT - PCT_BUFFER
-    return make_position(
-        id=id,
-        symbol=symbol,
-        open_price=OPEN_PRICE,
-        market_price=_market_price_for_pnl_pct(OPEN_PRICE, breached_pct),
-        sl=Decimal("95"),
-    )
-
-
-def _position_with_profit_take_opportunity(
-    make_position: Callable[..., Position], *, id: int, symbol: str
-) -> Position:
-    profitable_pct = PROFIT_TAKE_PCT + PCT_BUFFER
-    return make_position(
-        id=id,
-        symbol=symbol,
-        open_price=OPEN_PRICE,
-        market_price=_market_price_for_pnl_pct(OPEN_PRICE, profitable_pct),
-        sl=Decimal("90"),
-    )
-
-
-def _position_without_position_alerts(
-    make_position: Callable[..., Position], *, id: int, symbol: str
-) -> Position:
-    neutral_pct = Decimal("1")
-    return make_position(
-        id=id,
-        symbol=symbol,
-        open_price=OPEN_PRICE,
-        market_price=_market_price_for_pnl_pct(OPEN_PRICE, neutral_pct),
-        sl=Decimal("90"),
-    )
 
 
 def _weekly_view(snapshot: PortfolioSnapshot) -> WeeklySnapshotView:
@@ -228,11 +182,13 @@ def test_alerts_are_included_in_view_model(
     make_snapshot: Callable[..., PortfolioSnapshot],
     make_position: Callable[..., Position],
     make_account: Callable[..., AccountSummary],
+    make_position_with_stop_loss_breach: Callable[..., Position],
+    make_position_with_profit_take_opportunity: Callable[..., Position],
 ) -> None:
     account = make_account(balance=Decimal("50"), equity=Decimal("1000"))
-    breach = _position_with_stop_loss_breach(make_position, id=7, symbol="BREACH.PL")
+    breach = make_position_with_stop_loss_breach(make_position, id=7, symbol="BREACH.PL")
     no_sl = make_position(id=8, symbol="NOSL.PL", sl=None)
-    take_profit = _position_with_profit_take_opportunity(make_position, id=9, symbol="TAKE.PL")
+    take_profit = make_position_with_profit_take_opportunity(make_position, id=9, symbol="TAKE.PL")
     snapshot = make_snapshot(account=account, positions=(breach, no_sl, take_profit))
 
     view = _weekly_view(snapshot)
@@ -253,12 +209,14 @@ def test_alerts_are_included_in_view_model(
 
 def test_rows_flagged_only_for_positions_with_position_alerts(
     make_snapshot: Callable[..., PortfolioSnapshot],
-    make_position: Callable[..., Position],
     make_account: Callable[..., AccountSummary],
+    make_position: Callable[..., Position],
+    make_position_with_stop_loss_breach: Callable[..., Position],
+    make_position_without_position_alerts: Callable[..., Position],
 ) -> None:
     account = make_account(balance=Decimal("50"), equity=Decimal("1000"))
-    flagged = _position_with_stop_loss_breach(make_position, id=101, symbol="FLAGGED.PL")
-    unflagged = _position_without_position_alerts(make_position, id=102, symbol="OK.PL")
+    flagged = make_position_with_stop_loss_breach(make_position, id=101, symbol="FLAGGED.PL")
+    unflagged = make_position_without_position_alerts(make_position, id=102, symbol="OK.PL")
     snapshot = make_snapshot(account=account, positions=(flagged, unflagged))
 
     view = _weekly_view(snapshot)
