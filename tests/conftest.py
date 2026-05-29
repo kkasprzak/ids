@@ -74,12 +74,10 @@ def _market_price_for_pnl_pct(open_price: Decimal, pnl_pct: Decimal) -> Decimal:
     return open_price * (Decimal("1") + pnl_pct / Decimal("100"))
 
 
-def make_position_with_stop_loss_breach(
-    make_position_fn: Callable[..., Position], *, id: int, symbol: str
-) -> Position:
+def make_position_with_stop_loss_breach(*, id: int, symbol: str) -> Position:
     open_price = Decimal("100")
     breached_pct = STOP_LOSS_PCT - Decimal("0.01")
-    return make_position_fn(
+    return make_position(
         id=id,
         symbol=symbol,
         open_price=open_price,
@@ -88,12 +86,10 @@ def make_position_with_stop_loss_breach(
     )
 
 
-def make_position_with_profit_take_opportunity(
-    make_position_fn: Callable[..., Position], *, id: int, symbol: str
-) -> Position:
+def make_position_with_profit_take_opportunity(*, id: int, symbol: str) -> Position:
     open_price = Decimal("100")
     profitable_pct = PROFIT_TAKE_PCT + Decimal("0.01")
-    return make_position_fn(
+    return make_position(
         id=id,
         symbol=symbol,
         open_price=open_price,
@@ -102,12 +98,10 @@ def make_position_with_profit_take_opportunity(
     )
 
 
-def make_position_without_position_alerts(
-    make_position_fn: Callable[..., Position], *, id: int, symbol: str
-) -> Position:
+def make_position_without_position_alerts(*, id: int, symbol: str) -> Position:
     open_price = Decimal("100")
     neutral_pct = Decimal("1")
-    return make_position_fn(
+    return make_position(
         id=id,
         symbol=symbol,
         open_price=open_price,

@@ -186,9 +186,9 @@ def test_alerts_are_included_in_view_model(
     make_position_with_profit_take_opportunity: Callable[..., Position],
 ) -> None:
     account = make_account(balance=Decimal("50"), equity=Decimal("1000"))
-    breach = make_position_with_stop_loss_breach(make_position, id=7, symbol="BREACH.PL")
+    breach = make_position_with_stop_loss_breach(id=7, symbol="BREACH.PL")
     no_sl = make_position(id=8, symbol="NOSL.PL", sl=None)
-    take_profit = make_position_with_profit_take_opportunity(make_position, id=9, symbol="TAKE.PL")
+    take_profit = make_position_with_profit_take_opportunity(id=9, symbol="TAKE.PL")
     snapshot = make_snapshot(account=account, positions=(breach, no_sl, take_profit))
 
     view = _weekly_view(snapshot)
@@ -210,13 +210,12 @@ def test_alerts_are_included_in_view_model(
 def test_rows_flagged_only_for_positions_with_position_alerts(
     make_snapshot: Callable[..., PortfolioSnapshot],
     make_account: Callable[..., AccountSummary],
-    make_position: Callable[..., Position],
     make_position_with_stop_loss_breach: Callable[..., Position],
     make_position_without_position_alerts: Callable[..., Position],
 ) -> None:
     account = make_account(balance=Decimal("50"), equity=Decimal("1000"))
-    flagged = make_position_with_stop_loss_breach(make_position, id=101, symbol="FLAGGED.PL")
-    unflagged = make_position_without_position_alerts(make_position, id=102, symbol="OK.PL")
+    flagged = make_position_with_stop_loss_breach(id=101, symbol="FLAGGED.PL")
+    unflagged = make_position_without_position_alerts(id=102, symbol="OK.PL")
     snapshot = make_snapshot(account=account, positions=(flagged, unflagged))
 
     view = _weekly_view(snapshot)
