@@ -12,13 +12,63 @@
 | Cash %          | {{ view.cash_pct | pct }}  |
 | Open positions  | {{ view.open_positions_count }} |
 
+## Alerts
+
+{% if view.alerts %}
+### Missing stop-loss
+
+{% set missing_stop_loss = view.alerts | selectattr("kind", "equalto", "MISSING_STOP_LOSS") | list %}
+{% if missing_stop_loss %}
+{% for alert in missing_stop_loss -%}
+- [WARNING] `{{ alert.symbol }}` (position {{ alert.position_id }}): {{ alert.recommended_action }}
+{% endfor %}
+{% else %}
+- None.
+{% endif %}
+
+### Stop-loss breach (-5% or below)
+
+{% set stop_loss_breach = view.alerts | selectattr("kind", "equalto", "STOP_LOSS_BREACH") | list %}
+{% if stop_loss_breach %}
+{% for alert in stop_loss_breach -%}
+- [ACTION_REQUIRED] `{{ alert.symbol }}` (position {{ alert.position_id }}), P&L {{ alert.measured_pct | pct_signed }}: {{ alert.recommended_action }}
+{% endfor %}
+{% else %}
+- None.
+{% endif %}
+
+### Profit-take opportunity (+15% or above)
+
+{% set profit_take = view.alerts | selectattr("kind", "equalto", "PROFIT_TAKE_OPPORTUNITY") | list %}
+{% if profit_take %}
+{% for alert in profit_take -%}
+- [WARNING] `{{ alert.symbol }}` (position {{ alert.position_id }}), P&L {{ alert.measured_pct | pct_signed }}: {{ alert.recommended_action }}
+{% endfor %}
+{% else %}
+- None.
+{% endif %}
+
+### Cash reserve below minimum (10%)
+
+{% set low_cash = view.alerts | selectattr("kind", "equalto", "CASH_RESERVE_BELOW_MINIMUM") | list %}
+{% if low_cash %}
+{% for alert in low_cash -%}
+- [WARNING] Cash at {{ alert.measured_pct | pct }}: {{ alert.recommended_action }}
+{% endfor %}
+{% else %}
+- None.
+{% endif %}
+{% else %}
+_No strategy compliance alerts._
+{% endif %}
+
 ## Open positions
 
 {% if view.rows %}
-| Symbol       |  Open date | Days | Open price | Market price |  P&L (PLN) |  P&L % |
-| ------------ | ---------: | ---: | ---------: | -----------: | ---------: | -----: |
+| Symbol       |  Open date | Days | Open price | Market price |  P&L (PLN) |  P&L % | Alert |
+| ------------ | ---------: | ---: | ---------: | -----------: | ---------: | -----: | :---: |
 {% for row in view.rows -%}
-| {{ row.symbol }} | {{ row.open_date.isoformat() }} | {{ row.days_held }} | {{ row.open_price | price }} | {{ row.market_price | price }} | {{ row.pnl_pln | pln_signed }} | {{ row.pnl_pct | pct_signed }} |
+| {{ row.symbol }} | {{ row.open_date.isoformat() }} | {{ row.days_held }} | {{ row.open_price | price }} | {{ row.market_price | price }} | {{ row.pnl_pln | pln_signed }} | {{ row.pnl_pct | pct_signed }} | {% if row.has_alert %}YES{% endif %} |
 {% endfor %}
 {% else %}
 _No open positions._
