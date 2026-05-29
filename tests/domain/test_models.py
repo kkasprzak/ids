@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from ids.domain.enums import AlertKind, AlertSeverity, PositionType
+from ids.domain.enums import AlertKind, PositionType
 from ids.domain.models import AccountSummary, Alert, PortfolioSnapshot, Position
 
 pytestmark = pytest.mark.unit
@@ -48,18 +48,8 @@ def test_position_requires_positive_market_price(
 
 
 def test_alert_classifies_position_and_portfolio_scope() -> None:
-    position_alert = Alert(
-        kind=AlertKind.MISSING_STOP_LOSS,
-        severity=AlertSeverity.WARNING,
-        recommended_action="Set stop-loss",
-        position_id=42,
-        symbol="PKN.PL",
-    )
-    portfolio_alert = Alert(
-        kind=AlertKind.CASH_RESERVE_BELOW_MINIMUM,
-        severity=AlertSeverity.WARNING,
-        recommended_action="Raise cash",
-    )
+    position_alert = Alert.missing_stop_loss(position_id=42, symbol="PKN.PL")
+    portfolio_alert = Alert.cash_reserve_below_minimum(measured_pct=Decimal("9.99"))
 
     assert position_alert.is_position_alert() is True
     assert position_alert.is_portfolio_alert() is False
