@@ -39,7 +39,7 @@ def make_xlsx(
     workbook.remove(default)
 
     workbook.create_sheet("CLOSED POSITION HISTORY")
-    open_sheet = workbook.create_sheet("OPEN POSITION 02052026")
+    open_sheet = workbook.create_sheet(f"OPEN POSITION {export_dt.strftime('%d%m%Y')}")
     workbook.create_sheet("PENDING ORDERS HISTORY")
     workbook.create_sheet("CASH OPERATION HISTORY")
 
