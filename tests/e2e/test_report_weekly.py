@@ -14,7 +14,9 @@ pytestmark = pytest.mark.e2e
 
 _FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 FIXTURE_XLSX = _FIXTURES_DIR / "account_ikze_99999999_pl_xlsx_2024-12-31_2026-05-02.xlsx"
+FIXTURE_XLSX_ALERTS = _FIXTURES_DIR / "account_ikze_99999999_pl_xlsx_2024-12-31_2026-05-09.xlsx"
 EXPECTED_WEEKLY = _FIXTURES_DIR / "expected" / "weekly_2026-05-02.md"
+EXPECTED_WEEKLY_ALERTS = _FIXTURES_DIR / "expected" / "weekly_2026-05-09.md"
 CLI_USAGE_ERROR = 2
 FIXED_NOW = datetime(2026, 5, 12, 18, 30, tzinfo=WARSAW)
 
@@ -54,6 +56,29 @@ def test_weekly_report_happy_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     _assert_weekly_outputs_exist(tmp_path)
     assert result.exit_code == 0
     assert _weekly_report_path(tmp_path).read_text(encoding="utf-8") == EXPECTED_WEEKLY.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_weekly_report_renders_compliance_alerts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Action-required alerts present → report still exits 0; golden captures alert section."""
+    monkeypatch.chdir(tmp_path)
+    inputs_dir = tmp_path / "inputs" / "xtb_exports"
+    inputs_dir.mkdir(parents=True)
+    shutil.copy(FIXTURE_XLSX_ALERTS, inputs_dir / FIXTURE_XLSX_ALERTS.name)
+    monkeypatch.setattr(report_cli, "_clock", lambda: FIXED_NOW)
+    monkeypatch.setenv("IDS_IKZE_ACCOUNT_ID", "99999999")
+
+    result = CliRunner().invoke(app, ["report", "weekly"])
+
+    expected_report = tmp_path / "outputs" / "reports" / "weekly" / "2026-05-09_weekly.md"
+    expected_snapshot = tmp_path / "outputs" / "snapshots" / "2026-05-09.jsonl"
+    assert expected_report.exists()
+    assert expected_snapshot.exists()
+    assert result.exit_code == 0
+    assert expected_report.read_text(encoding="utf-8") == EXPECTED_WEEKLY_ALERTS.read_text(
         encoding="utf-8"
     )
 
