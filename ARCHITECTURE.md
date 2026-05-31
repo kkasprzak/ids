@@ -72,6 +72,12 @@ specs/                              (user stories — see PRD section 6)
 - The XTB loader localises naive XLSX timestamps on ingestion; nothing else in the system needs to know about timezones.
 - Period boundaries (e.g., "April 2026") are constructed as aware datetimes at midnight Warsaw time.
 
+## Decision records
+
+Short notes on cross-cutting design choices. New entries are appended as one-paragraph bullets, not new top-level sections.
+
+- **Strategy rule constants live in `ids.domain.strategy_rules`** (IDS02). Numeric thresholds for compliance rules are named `Decimal` constants there; rule evaluation code (current compliance alerts, future pre-purchase checks) references the constants rather than hard-coding values, keeping the rulebook a single source of truth.
+
 ## Ports and adapters
 
 Every I/O concern is a port. Application code depends only on the port; infrastructure adapters provide the implementation. Tests can substitute fake implementations for any port.
