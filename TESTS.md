@@ -24,8 +24,7 @@ tests/
 ├── e2e/
 │   └── test_report_weekly.py  ← full CLI smoke test + golden file diff
 └── fixtures/
-    ├── generate_golden_xlsx.py ← run by hand to regenerate the XLSX fixture
-    ├── account_ikze_99999999_pl_xlsx_2024-12-31_2026-05-02.xlsx  ← synthetic XLSX
+    ├── account_ikze_99999999_pl_xlsx_2024-12-31_2026-05-02.xlsx  ← committed anonymized XTB export fixture
     └── expected/
         └── weekly_2026-05-02.md  ← golden Markdown output
 ```
@@ -149,7 +148,7 @@ and `ROUND_HALF_UP`. This must happen before any Decimal arithmetic.
 
 **Marker:** `pytest.mark.e2e`
 
-Full CLI integration: `CliRunner` invokes `ids report weekly` with a synthetic XLSX fixture,
+Full CLI integration: `CliRunner` invokes `ids report weekly` with a committed anonymized XLSX fixture,
 compares the output Markdown byte-for-byte against `tests/fixtures/expected/weekly_2026-05-02.md`.
 
 `monkeypatch.chdir(tmp_path)` makes the CLI think `inputs/` and `outputs/` are inside the
@@ -172,14 +171,11 @@ Tests in this file:
 or the overall report flow. If the golden file needs updating, run:
 
 ```bash
-# 1. Regenerate the XLSX fixture (if structure changed)
-uv run python tests/fixtures/generate_golden_xlsx.py
-
-# 2. Run the CLI once and capture output:
+# 1. Run the CLI once against committed fixture and capture output:
 IDS_IKZE_ACCOUNT_ID=99999999 uv run ids report weekly \
     --export tests/fixtures/account_ikze_99999999_pl_xlsx_2024-12-31_2026-05-02.xlsx
 
-# 3. Copy the generated report to the expected fixture path, review the diff, then commit.
+# 2. Copy the generated report to the expected fixture path, review the diff, then commit.
 cp outputs/reports/weekly/2026-05-02_weekly.md tests/fixtures/expected/weekly_2026-05-02.md
 ```
 

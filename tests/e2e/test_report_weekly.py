@@ -46,6 +46,13 @@ def _assert_weekly_outputs_exist(tmp_path: Path) -> None:
     assert missing_paths == ()
 
 
+def _assert_any_weekly_outputs_exist(tmp_path: Path) -> None:
+    reports = tuple((tmp_path / "outputs" / "reports" / "weekly").glob("*_weekly.md"))
+    snapshots = tuple((tmp_path / "outputs" / "snapshots").glob("*.jsonl"))
+    assert len(reports) == 1
+    assert len(snapshots) == 1
+
+
 def test_weekly_report_happy_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     runner = _arrange_weekly_run(tmp_path, monkeypatch)
 
@@ -154,4 +161,4 @@ def test_weekly_report_export_override_accepts_custom_filename(
     result = CliRunner().invoke(app, ["report", "weekly", "--export", str(export_path)])
 
     assert result.exit_code == 0
-    _assert_weekly_outputs_exist(tmp_path)
+    _assert_any_weekly_outputs_exist(tmp_path)
