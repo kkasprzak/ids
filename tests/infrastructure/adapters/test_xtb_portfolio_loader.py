@@ -636,7 +636,9 @@ def test_malformed_closed_position_row_raises_error(tmp_path: Path) -> None:
         closed_positions=[{"Close price": "NOT_A_NUMBER"}],
     )
 
-    with pytest.raises(PortfolioMalformedError, match=r"closed-position row.*close_price"):
+    with pytest.raises(
+        PortfolioMalformedError, match=r"closed-position row 12, field `close_price`"
+    ):
         _loader(input_dir).load_latest()
 
 
