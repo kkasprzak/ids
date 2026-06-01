@@ -83,4 +83,5 @@ Hexagonal (ports & adapters), three layers under `src/ids/`:
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
+- **Per-bead workflow**: ensure master is up-to-date → new branch per bead → work → open PR → CI must be green before the bead is considered done.
