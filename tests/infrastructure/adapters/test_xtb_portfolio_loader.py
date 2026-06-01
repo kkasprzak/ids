@@ -856,3 +856,44 @@ def test_naive_dt_to_warsaw_utc_input_converts_to_warsaw() -> None:
     result = _naive_dt_to_warsaw(utc)
     assert result.tzinfo == WARSAW
     assert result == datetime(2026, 1, 10, 9, 0, tzinfo=WARSAW)
+
+
+def _make_xlsx_with_closed_footer(path: Path, *, footer: str, n_positions: int = 2) -> None:
+    """Write a workbook with a custom footer row in the CLOSED POSITION HISTORY sheet."""
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Symbol": f"CP{i}"} for i in range(n_positions)],
+    )
+    wb = load_workbook(path)
+    ws = wb["CLOSED POSITION HISTORY"]
+    footer_row = _CLOSED_HEADER_ROW + 1 + n_positions
+    ws.cell(row=footer_row, column=1, value=footer)
+    wb.save(path)
+
+
+def test_closed_uppercase_total_footer_stops_parsing(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_footer(path, footer="TOTAL", n_positions=2)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert len(snapshot.closed_positions) == 2  # noqa: PLR2004
+
+
+def test_closed_footer_with_surrounding_spaces_stops_parsing(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_footer(path, footer="  Total  ", n_positions=1)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert len(snapshot.closed_positions) == 1
+
+
+def test_closed_localized_footer_stops_parsing(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_footer(path, footer="Razem", n_positions=2)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert len(snapshot.closed_positions) == 2  # noqa: PLR2004
