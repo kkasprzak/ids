@@ -2,13 +2,14 @@ import os
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from openpyxl import Workbook, load_workbook
 
 from ids.application.ports.portfolio import NoPortfolioAvailableError, PortfolioMalformedError
 from ids.domain.timezones import WARSAW
-from ids.infrastructure.adapters.xtb_portfolio_loader import XTBPortfolioLoader
+from ids.infrastructure.adapters.xtb_portfolio_loader import XTBPortfolioLoader, _naive_dt_to_warsaw
 from tests.infrastructure.adapters.conftest import (
     _CLOSED_HEADER,
     _CLOSED_HEADER_ROW,
@@ -834,3 +835,24 @@ def test_workbook_without_closed_sheet_yields_empty_closed_positions(tmp_path: P
 
     snapshot = _loader(input_dir).load_latest()
     assert snapshot.closed_positions == ()
+
+
+# ---------------------------------------------------------------------------
+# _naive_dt_to_warsaw unit tests (tz-aware branch)
+# openpyxl rejects tz-aware datetimes on write, so the astimezone branch
+# cannot be reached through the xlsx loader in practice. Test it directly.
+# ---------------------------------------------------------------------------
+
+
+def test_naive_dt_to_warsaw_naive_input_attaches_warsaw_tz() -> None:
+    naive = datetime(2026, 1, 10, 9, 0)
+    result = _naive_dt_to_warsaw(naive)
+    assert result.tzinfo == WARSAW
+    assert result.replace(tzinfo=None) == naive
+
+
+def test_naive_dt_to_warsaw_utc_input_converts_to_warsaw() -> None:
+    utc = datetime(2026, 1, 10, 8, 0, tzinfo=ZoneInfo("UTC"))
+    result = _naive_dt_to_warsaw(utc)
+    assert result.tzinfo == WARSAW
+    assert result == datetime(2026, 1, 10, 9, 0, tzinfo=WARSAW)
