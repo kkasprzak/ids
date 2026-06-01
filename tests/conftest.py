@@ -7,7 +7,7 @@ from decimal import Decimal
 import pytest
 
 from ids.domain.enums import PositionType
-from ids.domain.models import AccountSummary, PortfolioSnapshot, Position
+from ids.domain.models import AccountSummary, ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.strategy_rules import PROFIT_TAKE_PCT, STOP_LOSS_PCT
 from ids.domain.timezones import WARSAW
 
@@ -54,12 +54,42 @@ def make_position(  # noqa: PLR0913
     )
 
 
+def make_closed_position(  # noqa: PLR0913
+    *,
+    id: int = 1001,
+    symbol: str = "TEST.PL",
+    type: PositionType = PositionType.BUY,
+    volume: Decimal = Decimal("10"),
+    open_time: datetime | None = None,
+    close_time: datetime | None = None,
+    open_price: Decimal = Decimal("100"),
+    close_price: Decimal = Decimal("110"),
+    purchase_value_pln: Decimal = Decimal("1000"),
+    gross_pl_pln: Decimal = Decimal("100"),
+) -> ClosedPosition:
+    position_open_time = open_time or datetime(2026, 1, 1, 9, 0, tzinfo=WARSAW)
+    position_close_time = close_time or datetime(2026, 1, 10, 9, 0, tzinfo=WARSAW)
+    return ClosedPosition(
+        id=id,
+        symbol=symbol,
+        type=type,
+        volume=volume,
+        open_time=position_open_time,
+        close_time=position_close_time,
+        open_price=open_price,
+        close_price=close_price,
+        purchase_value_pln=purchase_value_pln,
+        gross_pl_pln=gross_pl_pln,
+    )
+
+
 def make_snapshot(
     *,
     as_of: date = date(2026, 5, 2),
     source_id: str = "test:fixture",
     account: AccountSummary | None = None,
     positions: tuple[Position, ...] = (),
+    closed_positions: tuple[ClosedPosition, ...] = (),
 ) -> PortfolioSnapshot:
     snapshot_account = account or make_account()
     return PortfolioSnapshot(
@@ -67,6 +97,7 @@ def make_snapshot(
         source_id=source_id,
         account=snapshot_account,
         positions=positions,
+        closed_positions=closed_positions,
     )
 
 
@@ -122,6 +153,11 @@ def make_account_factory() -> Callable[..., AccountSummary]:
 @pytest.fixture(name="make_position")
 def make_position_factory() -> Callable[..., Position]:
     return make_position
+
+
+@pytest.fixture(name="make_closed_position")
+def make_closed_position_factory() -> Callable[..., ClosedPosition]:
+    return make_closed_position
 
 
 @pytest.fixture(name="make_snapshot")

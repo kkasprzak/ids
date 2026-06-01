@@ -6,7 +6,7 @@ from typing import Any
 
 from ids.application.ports.snapshot_store import SnapshotNotFoundError, SnapshotStore
 from ids.domain.enums import PositionType
-from ids.domain.models import AccountSummary, PortfolioSnapshot, Position
+from ids.domain.models import AccountSummary, ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.timezones import WARSAW
 
 
@@ -58,6 +58,9 @@ def _snapshot_to_dict(snapshot: PortfolioSnapshot) -> dict[str, Any]:
             "export_datetime": snapshot.account.export_datetime.isoformat(),
         },
         "positions": [_position_to_dict(position) for position in snapshot.positions],
+        "closed_positions": [
+            _closed_position_to_dict(position) for position in snapshot.closed_positions
+        ],
     }
 
 
@@ -77,10 +80,16 @@ def _position_to_dict(position: Position) -> dict[str, Any]:
 
 
 def _dict_to_snapshot(data: dict[str, Any]) -> PortfolioSnapshot:
-    if data.get("schema_version") != 1:
+    schema_version = data.get("schema_version")
+    if schema_version not in (1, 2):
         raise SnapshotNotFoundError(
-            f"Unsupported snapshot schema_version: {data.get('schema_version')}",
+            f"Unsupported snapshot schema_version: {schema_version}",
         )
+
+    closed_positions_data = data.get("closed_positions", [])
+    if schema_version == 1:
+        closed_positions_data = []
+
     return PortfolioSnapshot(
         as_of_date=date.fromisoformat(data["as_of_date"]),
         source_id=data["source_id"],
@@ -90,7 +99,10 @@ def _dict_to_snapshot(data: dict[str, Any]) -> PortfolioSnapshot:
             export_datetime=_parse_datetime(data["account"]["export_datetime"]),
         ),
         positions=tuple(_dict_to_position(position) for position in data["positions"]),
-        schema_version=data["schema_version"],
+        closed_positions=tuple(
+            _dict_to_closed_position(position) for position in closed_positions_data
+        ),
+        schema_version=schema_version,
     )
 
 
@@ -106,6 +118,36 @@ def _dict_to_position(data: dict[str, Any]) -> Position:
         purchase_value_pln=Decimal(data["purchase_value_pln"]),
         gross_pl_pln=Decimal(data["gross_pl_pln"]),
         sl=Decimal(data["sl"]) if data["sl"] is not None else None,
+    )
+
+
+def _closed_position_to_dict(position: ClosedPosition) -> dict[str, Any]:
+    return {
+        "id": position.id,
+        "symbol": position.symbol,
+        "type": position.type.value,
+        "volume": str(position.volume),
+        "open_time": position.open_time.isoformat(),
+        "close_time": position.close_time.isoformat(),
+        "open_price": str(position.open_price),
+        "close_price": str(position.close_price),
+        "purchase_value_pln": str(position.purchase_value_pln),
+        "gross_pl_pln": str(position.gross_pl_pln),
+    }
+
+
+def _dict_to_closed_position(data: dict[str, Any]) -> ClosedPosition:
+    return ClosedPosition(
+        id=data["id"],
+        symbol=data["symbol"],
+        type=PositionType(data["type"]),
+        volume=Decimal(data["volume"]),
+        open_time=_parse_datetime(data["open_time"]),
+        close_time=_parse_datetime(data["close_time"]),
+        open_price=Decimal(data["open_price"]),
+        close_price=Decimal(data["close_price"]),
+        purchase_value_pln=Decimal(data["purchase_value_pln"]),
+        gross_pl_pln=Decimal(data["gross_pl_pln"]),
     )
 
 

@@ -36,12 +36,31 @@ class Position:
 
 
 @dataclass(frozen=True)
+class ClosedPosition:
+    id: int
+    symbol: str
+    type: PositionType
+    volume: Decimal
+    open_time: datetime
+    close_time: datetime
+    open_price: Decimal
+    close_price: Decimal
+    purchase_value_pln: Decimal
+    gross_pl_pln: Decimal
+
+    def __post_init__(self) -> None:
+        _require_positive_decimal("ClosedPosition", "open_price", self.open_price)
+        _require_positive_decimal("ClosedPosition", "close_price", self.close_price)
+
+
+@dataclass(frozen=True)
 class PortfolioSnapshot:
     as_of_date: date
     source_id: str
     account: AccountSummary
     positions: tuple[Position, ...]
-    schema_version: int = 1
+    closed_positions: tuple[ClosedPosition, ...] = ()
+    schema_version: int = 2
 
 
 @dataclass(frozen=True)
