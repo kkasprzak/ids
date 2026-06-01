@@ -345,14 +345,20 @@ class XTBPortfolioLoader(PortfolioLoader):
         if _CLOSED_SHEET_NAME not in workbook.sheetnames:
             return []
         sheet = workbook[_CLOSED_SHEET_NAME]
-        try:
-            header_row_idx, columns = _find_labelled_row(
-                sheet,
-                schema=_CLOSED_POSITION_COLUMN_SCHEMA,
-                max_scan_rows=_CLOSED_POSITION_HEADER_SCAN_ROWS,
+        has_cells = any(
+            cell is not None
+            for row in sheet.iter_rows(
+                min_row=1, max_row=_CLOSED_POSITION_HEADER_SCAN_ROWS, values_only=True
             )
-        except PortfolioMalformedError:
+            for cell in row
+        )
+        if not has_cells:
             return []
+        header_row_idx, columns = _find_labelled_row(
+            sheet,
+            schema=_CLOSED_POSITION_COLUMN_SCHEMA,
+            max_scan_rows=_CLOSED_POSITION_HEADER_SCAN_ROWS,
+        )
 
         closed_positions: list[ClosedPosition] = []
         for row_idx, row in enumerate(

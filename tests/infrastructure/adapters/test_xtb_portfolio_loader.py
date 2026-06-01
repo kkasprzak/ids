@@ -9,7 +9,12 @@ from openpyxl import Workbook, load_workbook
 from ids.application.ports.portfolio import NoPortfolioAvailableError, PortfolioMalformedError
 from ids.domain.timezones import WARSAW
 from ids.infrastructure.adapters.xtb_portfolio_loader import XTBPortfolioLoader
-from tests.infrastructure.adapters.conftest import _HEADER, make_xlsx
+from tests.infrastructure.adapters.conftest import (
+    _CLOSED_HEADER,
+    _CLOSED_HEADER_ROW,
+    _HEADER,
+    make_xlsx,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -650,3 +655,65 @@ def test_closed_positions_header_at_row_11_found(tmp_path: Path) -> None:
 
     snapshot = _loader(input_dir).load_latest()
     assert snapshot.closed_positions[0].id == 777  # noqa: PLR2004
+
+
+def test_truly_empty_closed_sheet_yields_empty_tuple(tmp_path: Path) -> None:
+    """CLOSED POSITION HISTORY sheet exists but has no cells → returns ()."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    # make_xlsx with closed_positions=None creates CLOSED sheet but writes no cells.
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=None,
+    )
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions == ()
+
+
+def test_closed_sheet_with_partial_header_raises_malformed(tmp_path: Path) -> None:
+    """CLOSED sheet has cells but is missing a required column → raises PortfolioMalformedError."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501}],
+    )
+    wb = load_workbook(path)
+    ws = wb["CLOSED POSITION HISTORY"]
+    gross_pl_col = _CLOSED_HEADER.index("Gross P/L") + 1
+    ws.cell(row=_CLOSED_HEADER_ROW, column=gross_pl_col, value="REMOVED_COLUMN")
+    wb.save(path)
+
+    with pytest.raises(PortfolioMalformedError, match="gross_pl"):
+        _loader(input_dir).load_latest()
+
+
+def test_closed_sheet_with_renamed_column_raises_malformed(tmp_path: Path) -> None:
+    """CLOSED sheet with all columns present but one renamed → raises PortfolioMalformedError."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501}],
+    )
+    wb = load_workbook(path)
+    ws = wb["CLOSED POSITION HISTORY"]
+    close_price_col = _CLOSED_HEADER.index("Close price") + 1
+    ws.cell(row=_CLOSED_HEADER_ROW, column=close_price_col, value="Closing price")
+    wb.save(path)
+
+    with pytest.raises(PortfolioMalformedError, match="close_price"):
+        _loader(input_dir).load_latest()
