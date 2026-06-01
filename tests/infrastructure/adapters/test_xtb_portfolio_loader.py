@@ -897,3 +897,91 @@ def test_closed_localized_footer_stops_parsing(tmp_path: Path) -> None:
 
     snapshot = _loader(tmp_path / "inputs").load_latest()
     assert len(snapshot.closed_positions) == 2  # noqa: PLR2004
+
+
+# ---------------------------------------------------------------------------
+# FU2: tolerant CLOSED sheet name lookup
+# ---------------------------------------------------------------------------
+
+
+def test_closed_sheet_case_insensitive_name_match(tmp_path: Path) -> None:
+    """CLOSED sheet renamed to sentence-case → still parsed via normalized lookup."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501, "Symbol": "CASE"}],
+    )
+    wb = load_workbook(path)
+    wb["CLOSED POSITION HISTORY"].title = "Closed Position History"
+    wb.save(path)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions[0].symbol == "CASE"
+
+
+def test_closed_sheet_with_trailing_whitespace_name_match(tmp_path: Path) -> None:
+    """CLOSED sheet name with trailing space → parsed via normalized lookup."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501, "Symbol": "SPACE"}],
+    )
+    wb = load_workbook(path)
+    wb["CLOSED POSITION HISTORY"].title = "CLOSED POSITION HISTORY "
+    wb.save(path)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions[0].symbol == "SPACE"
+
+
+def test_closed_sheet_semantic_fallback_when_name_differs(tmp_path: Path) -> None:
+    """CLOSED sheet renamed completely → parsed via column-structure semantic fallback."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501, "Symbol": "FALLBACK"}],
+    )
+    wb = load_workbook(path)
+    wb["CLOSED POSITION HISTORY"].title = "HISTORIA POZYCJI"
+    wb.save(path)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions[0].symbol == "FALLBACK"
+
+
+def test_multiple_closed_position_schema_sheets_raises_ambiguity(tmp_path: Path) -> None:
+    """Two sheets with closed-position schema → PortfolioMalformedError with ambiguity message."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501}],
+    )
+    wb = load_workbook(path)
+    wb["CLOSED POSITION HISTORY"].title = "CLOSED A"
+    dup = wb.create_sheet("CLOSED B")
+    for col, name in enumerate(_CLOSED_HEADER, start=1):
+        dup.cell(row=_CLOSED_HEADER_ROW, column=col, value=name)
+    wb.save(path)
+
+    with pytest.raises(PortfolioMalformedError, match="Ambiguous"):
+        _loader(input_dir).load_latest()

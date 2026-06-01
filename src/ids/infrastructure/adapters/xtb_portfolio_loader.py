@@ -355,10 +355,33 @@ class XTBPortfolioLoader(PortfolioLoader):
             )
         return row[col_idx]
 
+    def _find_closed_position_sheet(self, workbook: Workbook) -> Worksheet | None:
+        # 1. Exact match.
+        if _CLOSED_SHEET_NAME in workbook.sheetnames:
+            return workbook[_CLOSED_SHEET_NAME]
+        # 2. Normalized match (case-insensitive, whitespace-tolerant).
+        target = _normalize_label(_CLOSED_SHEET_NAME)
+        for name in workbook.sheetnames:
+            if _normalize_label(name) == target:
+                log.info("Closed-position sheet found via normalized match: %r", name)
+                return workbook[name]
+        # 3. Semantic fallback by column structure.
+        semantic = [n for n in workbook.sheetnames if _sheet_has_closed_position_table(workbook[n])]
+        if len(semantic) == 1:
+            log.info("No closed-sheet name match; using semantic fallback: %r", semantic[0])
+            return workbook[semantic[0]]
+        if len(semantic) > 1:
+            raise PortfolioMalformedError(
+                f"Multiple sheets contain the closed-position table columns; cannot choose "
+                f"automatically. Ambiguous sheets: {semantic}. "
+                f"All sheets: {workbook.sheetnames}"
+            )
+        return None
+
     def _parse_closed_positions(self, workbook: Workbook) -> list[ClosedPosition]:
-        if _CLOSED_SHEET_NAME not in workbook.sheetnames:
+        sheet = self._find_closed_position_sheet(workbook)
+        if sheet is None:
             return []
-        sheet = workbook[_CLOSED_SHEET_NAME]
         has_cells = any(
             cell is not None
             for row in sheet.iter_rows(
@@ -501,6 +524,22 @@ def _sheet_has_position_table(
         covered = sum(
             1
             for aliases in _POSITION_COLUMN_SCHEMA.values()
+            if any(_normalize_label(a) in present for a in aliases)
+        )
+        if covered == required_count:
+            return True
+    return False
+
+
+def _sheet_has_closed_position_table(
+    sheet: Worksheet, max_scan_rows: int = _CLOSED_POSITION_HEADER_SCAN_ROWS
+) -> bool:
+    required_count = len(_CLOSED_POSITION_COLUMN_SCHEMA)
+    for row in sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True):
+        present = {_normalize_label(str(cell)) for cell in row if isinstance(cell, str)}
+        covered = sum(
+            1
+            for aliases in _CLOSED_POSITION_COLUMN_SCHEMA.values()
             if any(_normalize_label(a) in present for a in aliases)
         )
         if covered == required_count:
