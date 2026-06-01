@@ -7,13 +7,14 @@ from ids.domain.enums import AlertKind, PositionType
 from ids.domain.models import AccountSummary, Alert, PortfolioSnapshot, Position
 
 pytestmark = pytest.mark.unit
+SCHEMA_V2 = 2
 
 
-def test_portfolio_snapshot_schema_default_is_1(
+def test_portfolio_snapshot_schema_default_is_2(
     make_snapshot: Callable[..., PortfolioSnapshot],
 ) -> None:
     snapshot: PortfolioSnapshot = make_snapshot()
-    assert snapshot.schema_version == 1
+    assert snapshot.schema_version == SCHEMA_V2
 
 
 def test_position_type_buy_value() -> None:
