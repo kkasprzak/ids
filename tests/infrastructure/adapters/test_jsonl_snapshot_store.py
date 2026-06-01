@@ -222,3 +222,50 @@ def test_list_all_supports_mixed_schema_v1_v2_ordered_by_as_of(tmp_path: Path) -
     assert listed[0].closed_positions == ()
     assert listed[1].schema_version == SCHEMA_V2
     assert len(listed[1].closed_positions) == 1
+
+
+@pytest.mark.parametrize(
+    ("payload", "error_match"),
+    (
+        (
+            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[]}\n',
+            "closed_positions",
+        ),
+        (
+            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":{},"closed_positions":[]}\n',
+            "positions",
+        ),
+        (
+            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[],"closed_positions":{}}\n',
+            "closed_positions",
+        ),
+        (
+            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[123],"closed_positions":[]}\n',
+            "positions",
+        ),
+        (
+            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[],"closed_positions":[123]}\n',
+            "closed_positions",
+        ),
+        (
+            '{"schema_version":true,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[],"closed_positions":[]}\n',
+            "schema_version",
+        ),
+        (
+            '{"schema_version":"2","as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[],"closed_positions":[]}\n',
+            "schema_version",
+        ),
+    ),
+)
+def test_malformed_snapshot_payload_raises_snapshot_not_found(
+    tmp_path: Path,
+    payload: str,
+    error_match: str,
+) -> None:
+    store = _store(tmp_path)
+    path = _snapshot_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(SnapshotNotFoundError, match=error_match):
+        store.load(date(2026, 5, 2))

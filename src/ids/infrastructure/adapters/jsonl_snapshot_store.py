@@ -2,7 +2,7 @@ import json
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ids.application.ports.snapshot_store import SnapshotNotFoundError, SnapshotStore
 from ids.domain.enums import PositionType
@@ -80,25 +80,25 @@ def _position_to_dict(position: Position) -> dict[str, Any]:
 
 
 def _dict_to_snapshot(data: dict[str, Any]) -> PortfolioSnapshot:
-    schema_version = data.get("schema_version")
-    if schema_version not in (1, 2):
-        raise SnapshotNotFoundError(
-            f"Unsupported snapshot schema_version: {schema_version}",
+    schema_version = _require_schema_version(_require_field(data, "schema_version"))
+    account_data = _require_record(_require_field(data, "account"), field="account")
+    positions_data = _require_record_list(_require_field(data, "positions"), field="positions")
+    if schema_version == 1:
+        closed_positions_data: list[dict[str, Any]] = []
+    else:
+        closed_positions_data = _require_record_list(
+            _require_field(data, "closed_positions"), field="closed_positions"
         )
 
-    closed_positions_data = data.get("closed_positions", [])
-    if schema_version == 1:
-        closed_positions_data = []
-
     return PortfolioSnapshot(
-        as_of_date=date.fromisoformat(data["as_of_date"]),
-        source_id=data["source_id"],
+        as_of_date=date.fromisoformat(str(_require_field(data, "as_of_date"))),
+        source_id=str(_require_field(data, "source_id")),
         account=AccountSummary(
-            balance_pln=Decimal(data["account"]["balance_pln"]),
-            equity_pln=Decimal(data["account"]["equity_pln"]),
-            export_datetime=_parse_datetime(data["account"]["export_datetime"]),
+            balance_pln=Decimal(str(_require_field(account_data, "balance_pln"))),
+            equity_pln=Decimal(str(_require_field(account_data, "equity_pln"))),
+            export_datetime=_parse_datetime(str(_require_field(account_data, "export_datetime"))),
         ),
-        positions=tuple(_dict_to_position(position) for position in data["positions"]),
+        positions=tuple(_dict_to_position(position) for position in positions_data),
         closed_positions=tuple(
             _dict_to_closed_position(position) for position in closed_positions_data
         ),
@@ -119,6 +119,46 @@ def _dict_to_position(data: dict[str, Any]) -> Position:
         gross_pl_pln=Decimal(data["gross_pl_pln"]),
         sl=Decimal(data["sl"]) if data["sl"] is not None else None,
     )
+
+
+def _require_field(data: dict[str, Any], field: str) -> Any:
+    if field not in data:
+        raise SnapshotNotFoundError(
+            f"Missing required field `{field}` in snapshot payload",
+        )
+    return data[field]
+
+
+def _require_schema_version(raw: Any) -> int:
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise SnapshotNotFoundError(f"Invalid snapshot schema_version type: {type(raw).__name__}")
+    if raw not in (1, 2):
+        raise SnapshotNotFoundError(f"Unsupported snapshot schema_version: {raw}")
+    return raw
+
+
+def _require_record(raw: Any, *, field: str) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise SnapshotNotFoundError(
+            f"Field `{field}` must be an object in snapshot payload",
+        )
+    return cast(dict[str, Any], raw)
+
+
+def _require_record_list(raw: Any, *, field: str) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        raise SnapshotNotFoundError(
+            f"Field `{field}` must be a list in snapshot payload",
+        )
+    raw_list = cast(list[Any], raw)
+    records: list[dict[str, Any]] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            raise SnapshotNotFoundError(
+                f"Field `{field}` must contain only objects in snapshot payload",
+            )
+        records.append(cast(dict[str, Any], item))
+    return records
 
 
 def _closed_position_to_dict(position: ClosedPosition) -> dict[str, Any]:
