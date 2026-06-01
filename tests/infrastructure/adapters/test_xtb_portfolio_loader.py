@@ -22,13 +22,14 @@ def _export_name(as_of: str) -> str:
     return f"account_ikze_99999999_pl_xlsx_2024-12-31_{as_of}.xlsx"
 
 
-def _write_export(
+def _write_export(  # noqa: PLR0913
     input_dir: Path,
     *,
     as_of: str = "2026-05-02",
     balance: Decimal = Decimal("1"),
     equity: Decimal = Decimal("2"),
     positions: list[dict] | None = None,
+    closed_positions: list[dict] | None = None,
 ) -> Path:
     path = input_dir / _export_name(as_of)
     make_xlsx(
@@ -37,6 +38,7 @@ def _write_export(
         equity=equity,
         export_dt=datetime.fromisoformat(f"{as_of}T10:30:00"),
         positions=[] if positions is None else positions,
+        closed_positions=closed_positions,
     )
     return path
 
@@ -548,3 +550,103 @@ def test_missing_numeric_cell_reports_row_and_field(tmp_path: Path) -> None:
 
     with pytest.raises(PortfolioMalformedError, match=r"row 8, field `open_price`"):
         _loader(tmp_path / "inputs").load_latest()
+
+
+# ---------------------------------------------------------------------------
+# Closed positions
+# ---------------------------------------------------------------------------
+
+
+def test_single_closed_position_parsed_correctly(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(
+        input_dir,
+        closed_positions=[
+            {
+                "Position": 501,
+                "Symbol": "VWCE.DE",
+                "Type": "BUY",
+                "Volume": Decimal("2"),
+                "Open time": datetime(2026, 1, 10, 9, 0),
+                "Open price": Decimal("95.00"),
+                "Close time": datetime(2026, 5, 1, 15, 0),
+                "Close price": Decimal("102.50"),
+                "Purchase value": Decimal("190.00"),
+                "Gross P/L": Decimal("15.00"),
+            }
+        ],
+    )
+
+    snapshot = _loader(input_dir).load_latest()
+
+    assert len(snapshot.closed_positions) == 1
+    cp = snapshot.closed_positions[0]
+    assert cp.id == 501  # noqa: PLR2004
+    assert cp.symbol == "VWCE.DE"
+    assert cp.open_price == Decimal("95.00")
+    assert cp.close_price == Decimal("102.50")
+    assert cp.purchase_value_pln == Decimal("190.00")
+    assert cp.gross_pl_pln == Decimal("15.00")
+    assert cp.open_time.tzinfo == WARSAW
+    assert cp.close_time.tzinfo == WARSAW
+
+
+def test_mix_open_and_closed_positions(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(
+        input_dir,
+        positions=[{"Position": 11, "Symbol": "OPEN1"}],
+        closed_positions=[
+            {"Position": 501, "Symbol": "CLOSED1"},
+            {"Position": 502, "Symbol": "CLOSED2"},
+        ],
+    )
+
+    snapshot = _loader(input_dir).load_latest()
+
+    assert len(snapshot.positions) == 1
+    assert snapshot.positions[0].symbol == "OPEN1"
+    assert len(snapshot.closed_positions) == 2  # noqa: PLR2004
+    assert tuple(cp.symbol for cp in snapshot.closed_positions) == ("CLOSED1", "CLOSED2")
+
+
+def test_empty_closed_sheet_yields_empty_tuple(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(input_dir)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions == ()
+
+
+def test_malformed_closed_position_row_raises_error(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    export_dt = datetime(2026, 5, 2, 10, 30)
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=export_dt,
+        positions=[],
+        closed_positions=[{"Close price": "NOT_A_NUMBER"}],
+    )
+
+    with pytest.raises(PortfolioMalformedError, match=r"closed-position row.*close_price"):
+        _loader(input_dir).load_latest()
+
+
+def test_closed_positions_header_at_row_11_found(tmp_path: Path) -> None:
+    """Header at row 11 (real XTB layout) must be discovered by the scanner."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 777, "Symbol": "DEEP"}],
+    )
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions[0].id == 777  # noqa: PLR2004
