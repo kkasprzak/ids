@@ -642,21 +642,79 @@ def test_malformed_closed_position_row_raises_error(tmp_path: Path) -> None:
         _loader(input_dir).load_latest()
 
 
-def test_closed_positions_header_at_row_11_found(tmp_path: Path) -> None:
-    """Header at row 11 (real XTB layout) must be discovered by the scanner."""
-    input_dir = tmp_path / "inputs"
-    path = input_dir / _export_name("2026-05-02")
-    make_xlsx(
-        path,
-        balance=Decimal("1"),
-        equity=Decimal("2"),
-        export_dt=datetime(2026, 5, 2, 10, 30),
-        positions=[],
-        closed_positions=[{"Position": 777, "Symbol": "DEEP"}],
+def _make_xlsx_with_closed_header_at_row(
+    path: Path,
+    *,
+    closed_header_row: int,
+    extra_cells_in_scan_window: bool = False,
+) -> None:
+    """Write a workbook where the closed-position header is at a custom row.
+
+    If extra_cells_in_scan_window is True, writes a dummy cell at row 1 of the
+    CLOSED sheet so the empty-sheet check (rows 1..15) sees content even when the
+    header is beyond row 15.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    export_dt = datetime(2026, 5, 2, 10, 30)
+    wb = Workbook()
+    default = wb.active
+    assert default is not None
+    wb.remove(default)
+
+    closed_ws = wb.create_sheet("CLOSED POSITION HISTORY")
+    if extra_cells_in_scan_window:
+        closed_ws.cell(row=1, column=1, value="DUMMY")
+    for col, name in enumerate(_CLOSED_HEADER, start=1):
+        closed_ws.cell(row=closed_header_row, column=col, value=name)
+    closed_ws.cell(row=closed_header_row + 1, column=1, value=888)
+    closed_ws.cell(row=closed_header_row + 1, column=2, value="OFFSET")
+    closed_ws.cell(row=closed_header_row + 1, column=3, value="BUY")
+    closed_ws.cell(row=closed_header_row + 1, column=4, value=1.0)
+    closed_ws.cell(row=closed_header_row + 1, column=5, value=export_dt)
+    closed_ws.cell(row=closed_header_row + 1, column=6, value=100.0)
+    closed_ws.cell(row=closed_header_row + 1, column=7, value=export_dt)
+    closed_ws.cell(row=closed_header_row + 1, column=8, value=110.0)
+    closed_ws.cell(row=closed_header_row + 1, column=11, value=100.0)
+    closed_ws.cell(row=closed_header_row + 1, column=19, value=10.0)
+
+    open_ws = wb.create_sheet(f"OPEN POSITION {export_dt.strftime('%d%m%Y')}")
+    open_ws.cell(row=3, column=2, value=export_dt)
+    open_ws.cell(row=4, column=4, value="Balance")
+    open_ws.cell(row=4, column=7, value="Equity")
+    open_ws.cell(row=5, column=4, value=1000.0)
+    open_ws.cell(row=5, column=7, value=2000.0)
+    for col, name in enumerate(_HEADER, start=1):
+        open_ws.cell(row=7, column=col, value=name)
+    open_ws.cell(row=8, column=1, value="Total")
+    wb.save(path)
+
+
+def test_closed_header_at_row_5_found(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_header_at_row(path, closed_header_row=5)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.closed_positions[0].symbol == "OFFSET"
+
+
+def test_closed_header_at_row_15_found(tmp_path: Path) -> None:
+    """Header at the last row of the scan window (15) must still be discovered."""
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_header_at_row(path, closed_header_row=15)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.closed_positions[0].symbol == "OFFSET"
+
+
+def test_closed_header_at_row_16_with_content_raises_malformed(tmp_path: Path) -> None:
+    """Header beyond scan window (row 16) with cells in rows 1-15 → PortfolioMalformedError."""
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_header_at_row(
+        path, closed_header_row=16, extra_cells_in_scan_window=True
     )
 
-    snapshot = _loader(input_dir).load_latest()
-    assert snapshot.closed_positions[0].id == 777  # noqa: PLR2004
+    with pytest.raises(PortfolioMalformedError, match="required columns"):
+        _loader(tmp_path / "inputs").load_latest()
 
 
 def test_truly_empty_closed_sheet_yields_empty_tuple(tmp_path: Path) -> None:
