@@ -751,3 +751,28 @@ def test_position_with_zero_market_price_raises_with_row_context(tmp_path: Path)
 
     with pytest.raises(PortfolioMalformedError, match=r"open-position row 8.*market_price"):
         _loader(input_dir).load_latest()
+
+
+def test_workbook_without_closed_sheet_yields_empty_closed_positions(tmp_path: Path) -> None:
+    """Workbook with no CLOSED POSITION HISTORY sheet at all → closed_positions = ()."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb = Workbook()
+    default = wb.active
+    assert default is not None
+    wb.remove(default)
+    ws = wb.create_sheet("OPEN POSITION 02052026")
+    export_dt = datetime(2026, 5, 2, 10, 30)
+    ws.cell(row=3, column=2, value=export_dt)
+    ws.cell(row=4, column=4, value="Balance")
+    ws.cell(row=4, column=7, value="Equity")
+    ws.cell(row=5, column=4, value=1000.0)
+    ws.cell(row=5, column=7, value=2000.0)
+    for col, name in enumerate(_HEADER, start=1):
+        ws.cell(row=7, column=col, value=name)
+    ws.cell(row=8, column=1, value="Total")
+    wb.save(path)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions == ()
