@@ -294,10 +294,24 @@ class XTBPortfolioLoader(PortfolioLoader):
             open_price = _cell_to_decimal(open_price_raw)
         except Exception as exc:
             raise _position_row_error(row_idx, "open_price", open_price_raw, exc) from exc
+        if open_price <= 0:
+            raise _position_row_error(
+                row_idx,
+                "open_price",
+                open_price_raw,
+                ValueError(f"open_price must be positive (got {open_price})"),
+            )
         try:
             market_price = _cell_to_decimal(market_price_raw)
         except Exception as exc:
             raise _position_row_error(row_idx, "market_price", market_price_raw, exc) from exc
+        if market_price <= 0:
+            raise _position_row_error(
+                row_idx,
+                "market_price",
+                market_price_raw,
+                ValueError(f"market_price must be positive (got {market_price})"),
+            )
         try:
             purchase_value = _cell_to_decimal(purchase_value_raw)
         except Exception as exc:
@@ -403,6 +417,13 @@ class XTBPortfolioLoader(PortfolioLoader):
             open_price = _cell_to_decimal(open_price_raw)
         except Exception as exc:
             raise _closed_position_row_error(row_idx, "open_price", open_price_raw, exc) from exc
+        if open_price <= 0:
+            raise _closed_position_row_error(
+                row_idx,
+                "open_price",
+                open_price_raw,
+                ValueError(f"open_price must be positive (got {open_price})"),
+            )
         try:
             close_time = _naive_dt_to_warsaw(close_time_raw)
         except Exception as exc:
@@ -411,6 +432,13 @@ class XTBPortfolioLoader(PortfolioLoader):
             close_price = _cell_to_decimal(close_price_raw)
         except Exception as exc:
             raise _closed_position_row_error(row_idx, "close_price", close_price_raw, exc) from exc
+        if close_price <= 0:
+            raise _closed_position_row_error(
+                row_idx,
+                "close_price",
+                close_price_raw,
+                ValueError(f"close_price must be positive (got {close_price})"),
+            )
         try:
             purchase_value = _cell_to_decimal(purchase_value_raw)
         except Exception as exc:
