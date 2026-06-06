@@ -5,6 +5,7 @@ from ids.application.ports import (
     PortfolioLoaderError,
     PortfolioMalformedError,
     ReportWriterError,
+    SnapshotMalformedError,
     SnapshotNotFoundError,
     SnapshotStoreError,
 )
@@ -22,6 +23,7 @@ pytestmark = pytest.mark.unit
         ReportWriterError,
         SnapshotStoreError,
         SnapshotNotFoundError,
+        SnapshotMalformedError,
     ],
 )
 def test_port_errors_inherit_from_ids_error(error_type: type[Exception]) -> None:

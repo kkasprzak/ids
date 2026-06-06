@@ -62,10 +62,12 @@ uv run pytest -n auto         # Run tests in parallel (pytest-xdist)
 uv run pytest --cov=ids       # Run with coverage
 uv run ruff check .           # Lint
 uv run ruff format .          # Format
-uv run pyright                # Type-check (strict on src/)
+uv run basedpyright           # Type-check, including Any leakage gate
 uv run lint-imports           # Architecture contracts (importlinter)
 uv run ids --help             # Run the CLI entrypoint
 ```
+
+`basedpyright` is the strict typing gate and fails on `Any` leaks.
 
 Pre-commit hooks are configured; install with `uv run pre-commit install`.
 
@@ -83,4 +85,5 @@ Hexagonal (ports & adapters), three layers under `src/ids/`:
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
+- **Per-bead workflow**: ensure master is up-to-date → new branch per bead → work → open PR → CI must be green before the bead is considered done.

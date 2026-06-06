@@ -12,10 +12,11 @@ dependencies = [
     "pyyaml>=6.0",
     "python-frontmatter>=1.1",
     "jinja2>=3.1",
+    "pydantic>=2.13.4",
 ]
 
 [project.scripts]
-ids = "ids.presentation.cli:app"
+ids = "ids.bootstrap:app"
 
 [dependency-groups]
 dev = [
@@ -23,9 +24,9 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-xdist>=3.5",
     "ruff>=0.6",
-    "pyright>=1.1.380",
     "pre-commit>=3.7",
     "import-linter>=2.11",
+    "basedpyright>=1.39.6",
 ]
 
 [build-system]
@@ -37,12 +38,16 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "PL"]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "PL", "ISC"]
 
-[tool.pyright]
+[tool.basedpyright]
 include = ["src", "tests"]
 strict = ["src"]
 pythonVersion = "3.12"
+typeCheckingMode = "standard"
+reportAny = "error"
+reportExplicitAny = "error"
+reportImplicitStringConcatenation = "none"
 
 [tool.importlinter]
 root_packages = ["ids"]
@@ -80,6 +85,12 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Domain and application must not import validation libraries"
+type = "forbidden"
+source_modules = ["ids.domain", "ids.application"]
+forbidden_modules = ["pydantic", "pydantic_core"]
+
+[[tool.importlinter.contracts]]
 name = "Application must not import infrastructure or presentation"
 type = "forbidden"
 source_modules = ["ids.application"]
@@ -92,9 +103,15 @@ source_modules = ["ids.infrastructure"]
 forbidden_modules = ["ids.presentation"]
 
 [[tool.importlinter.contracts]]
-name = "Hexagonal layers flow top-down: presentation -> infrastructure -> application -> domain"
+name = "Presentation must not import infrastructure"
+type = "forbidden"
+source_modules = ["ids.presentation"]
+forbidden_modules = ["ids.infrastructure"]
+
+[[tool.importlinter.contracts]]
+name = "User-facing layers flow top-down: presentation -> application -> domain"
 type = "layers"
-layers = ["ids.presentation", "ids.infrastructure", "ids.application", "ids.domain"]
+layers = ["ids.presentation", "ids.application", "ids.domain"]
 exhaustive = false
 
 [tool.pytest.ini_options]

@@ -1,0 +1,1 @@
+# PEP 561 marker: keep this file so type checkers treat ids as typed inline code.

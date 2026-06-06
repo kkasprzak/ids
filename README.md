@@ -26,7 +26,7 @@ uv run pytest                        # run the same test suite CI runs
 uv run pytest --cov=ids --cov-report=term-missing --cov-report=html
 uv run ruff check .                  # lint
 uv run ruff format .                 # format
-uv run pyright                       # type-check (strict on src/)
+uv run basedpyright                  # type-check, including Any leakage gate
 uv run pre-commit install            # enable git hooks
 ```
 

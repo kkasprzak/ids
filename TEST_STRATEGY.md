@@ -120,7 +120,7 @@ Coverage is informational only. `pytest-cov` is available for local inspection, 
 Stages run in order, fast-fail:
 
 1. `ruff check . && ruff format --check .`
-2. `pyright`
+2. `basedpyright`
 3. `pytest -m unit`
 4. `pytest`
 

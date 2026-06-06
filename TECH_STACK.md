@@ -19,6 +19,7 @@ This document lists the languages, libraries, and tools the Investment Decision 
 | XLSX parsing | `openpyxl` (direct dependency) |
 | Charts | `matplotlib` |
 | YAML parsing | `PyYAML` |
+| Data validation | `pydantic` |
 | Frontmatter handling | `python-frontmatter` |
 | Markdown templating | `jinja2` |
 | User-facing CLI output | `rich` |
@@ -32,7 +33,7 @@ This document lists the languages, libraries, and tools the Investment Decision 
 | Coverage | `pytest-cov` |
 | Parallel testing | `pytest-xdist` |
 | Linter and formatter | `ruff` |
-| Type checker | `pyright` |
+| Type checker | `basedpyright` |
 | Pre-commit hooks | `pre-commit` |
 | CI | GitHub Actions |
 

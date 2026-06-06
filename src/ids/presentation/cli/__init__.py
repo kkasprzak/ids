@@ -4,8 +4,6 @@ from decimal import ROUND_HALF_UP, getcontext
 
 import typer
 
-from ids.presentation.cli import report
-
 
 def _configure_decimal() -> None:
     ctx = getcontext()
@@ -15,10 +13,13 @@ def _configure_decimal() -> None:
 
 _configure_decimal()
 
-app = typer.Typer(no_args_is_help=True, add_completion=False)
-app.add_typer(report.app, name="report")
 
+def create_app(*, report_app: typer.Typer) -> typer.Typer:
+    app = typer.Typer(no_args_is_help=True, add_completion=False)
+    app.add_typer(report_app, name="report")
 
-@app.callback()
-def main() -> None:
-    """Investment Decision System."""
+    @app.callback()
+    def main() -> None:  # pyright: ignore[reportUnusedFunction]
+        """Investment Decision System."""
+
+    return app

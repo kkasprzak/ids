@@ -47,6 +47,11 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## Conventions & Patterns
+
+- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
+- **Per-bead workflow**: ensure master is up-to-date → new branch per bead → work → open PR → CI must be green before the bead is considered done.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ccf33ec3 -->
 ## Beads Issue Tracker
 

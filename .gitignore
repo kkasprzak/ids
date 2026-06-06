@@ -25,6 +25,7 @@ inputs/config.yaml
 inputs/strategy/
 
 # Local environment / secrets
+.zed/
 .env
 .env.*
 .envrc

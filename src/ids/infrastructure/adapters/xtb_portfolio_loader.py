@@ -2,7 +2,7 @@ import logging
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import NoReturn
 
 from openpyxl import load_workbook
 from openpyxl.workbook import Workbook
@@ -14,17 +14,23 @@ from ids.application.ports.portfolio import (
     PortfolioMalformedError,
 )
 from ids.domain.enums import PositionType
-from ids.domain.models import AccountSummary, PortfolioSnapshot, Position
+from ids.domain.models import AccountSummary, ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.timezones import WARSAW
 from ids.infrastructure.adapters.xtb_filename import parse_xtb_account_id, parse_xtb_filename
 
 log = logging.getLogger(__name__)
 
 _OPEN_SHEET_PREFIX = "OPEN POSITION "
+_CLOSED_SHEET_NAME = "CLOSED POSITION HISTORY"
+
+type ColumnSchema = dict[str, frozenset[str]]
+type RawCellValue = object
+type RawDataRow = tuple[RawCellValue, ...]
+type ColumnIndexes = dict[str, int]
 
 # Logical field → accepted label aliases. Normalized before matching (strip + casefold).
 # All XTB adapter complexity stays here; domain models never see these strings.
-_POSITION_COLUMN_SCHEMA: dict[str, frozenset[str]] = {
+_POSITION_COLUMN_SCHEMA: ColumnSchema = {
     "position_id": frozenset({"Position"}),
     "symbol": frozenset({"Symbol"}),
     "type": frozenset({"Type"}),
@@ -36,7 +42,19 @@ _POSITION_COLUMN_SCHEMA: dict[str, frozenset[str]] = {
     "sl": frozenset({"SL"}),
     "gross_pl": frozenset({"Gross P/L", "Gross P&L"}),
 }
-_ACCOUNT_COLUMN_SCHEMA: dict[str, frozenset[str]] = {
+_CLOSED_POSITION_COLUMN_SCHEMA: ColumnSchema = {
+    "position_id": frozenset({"Position"}),
+    "symbol": frozenset({"Symbol"}),
+    "type": frozenset({"Type"}),
+    "volume": frozenset({"Volume"}),
+    "open_time": frozenset({"Open time"}),
+    "open_price": frozenset({"Open price"}),
+    "close_time": frozenset({"Close time"}),
+    "close_price": frozenset({"Close price"}),
+    "purchase_value": frozenset({"Purchase value"}),
+    "gross_pl": frozenset({"Gross P/L", "Gross P&L"}),
+}
+_ACCOUNT_COLUMN_SCHEMA: ColumnSchema = {
     "balance": frozenset({"Balance"}),
     "equity": frozenset({"Equity"}),
 }
@@ -46,6 +64,8 @@ _ACCOUNT_COLUMN_SCHEMA: dict[str, frozenset[str]] = {
 _EXPORT_DATETIME_SCAN_ROWS = 15
 _ACCOUNT_HEADER_SCAN_ROWS = 15
 _POSITION_HEADER_SCAN_ROWS = 25
+# Real fixture has the closed-position header at row 11; 15 gives headroom.
+_CLOSED_POSITION_HEADER_SCAN_ROWS = 15
 
 
 def _normalize_label(label: str) -> str:
@@ -161,9 +181,11 @@ class XTBPortfolioLoader(PortfolioLoader):
 
     def _parse(self, path: Path, as_of_date: date) -> PortfolioSnapshot:
         try:
-            sheet = self._load_open_position_sheet(path)
-            account = self._parse_account_summary(sheet)
-            positions = self._parse_positions(sheet)
+            workbook = load_workbook(path, data_only=True, read_only=True)
+            open_sheet = self._find_open_position_sheet(workbook)
+            account = self._parse_account_summary(open_sheet)
+            positions = self._parse_positions(open_sheet)
+            closed_positions = self._parse_closed_positions(workbook)
         except PortfolioMalformedError:
             raise
         except Exception as exc:
@@ -174,6 +196,7 @@ class XTBPortfolioLoader(PortfolioLoader):
             source_id=f"xtb:{path.name}",
             account=account,
             positions=tuple(positions),
+            closed_positions=tuple(closed_positions),
         )
 
     def _load_open_position_sheet(self, path: Path) -> Worksheet:
@@ -246,9 +269,7 @@ class XTBPortfolioLoader(PortfolioLoader):
             positions.append(self._row_to_position(row, columns, row_idx))
         return positions
 
-    def _row_to_position(
-        self, row: tuple[Any, ...], columns: dict[str, int], row_idx: int
-    ) -> Position:
+    def _row_to_position(self, row: RawDataRow, columns: ColumnIndexes, row_idx: int) -> Position:
         position_id_raw = self._row_cell(row, columns, row_idx, "position_id")
         symbol_raw = self._row_cell(row, columns, row_idx, "symbol")
         type_raw = self._row_cell(row, columns, row_idx, "type")
@@ -276,10 +297,24 @@ class XTBPortfolioLoader(PortfolioLoader):
             open_price = _cell_to_decimal(open_price_raw)
         except Exception as exc:
             raise _position_row_error(row_idx, "open_price", open_price_raw, exc) from exc
+        if open_price <= 0:
+            raise _position_row_error(
+                row_idx,
+                "open_price",
+                open_price_raw,
+                ValueError(f"open_price must be positive (got {open_price})"),
+            )
         try:
             market_price = _cell_to_decimal(market_price_raw)
         except Exception as exc:
             raise _position_row_error(row_idx, "market_price", market_price_raw, exc) from exc
+        if market_price <= 0:
+            raise _position_row_error(
+                row_idx,
+                "market_price",
+                market_price_raw,
+                ValueError(f"market_price must be positive (got {market_price})"),
+            )
         try:
             purchase_value = _cell_to_decimal(purchase_value_raw)
         except Exception as exc:
@@ -295,7 +330,7 @@ class XTBPortfolioLoader(PortfolioLoader):
             raise _position_row_error(row_idx, "sl", sl_raw, exc) from exc
 
         try:
-            position_id = int(position_id_raw)
+            position_id = _cell_to_int(position_id_raw)
         except Exception as exc:
             raise _position_row_error(row_idx, "position_id", position_id_raw, exc) from exc
 
@@ -313,12 +348,158 @@ class XTBPortfolioLoader(PortfolioLoader):
         )
 
     def _row_cell(
-        self, row: tuple[Any, ...], columns: dict[str, int], row_idx: int, logical_field: str
-    ) -> Any:
+        self, row: RawDataRow, columns: ColumnIndexes, row_idx: int, logical_field: str
+    ) -> RawCellValue:
         col_idx = columns[logical_field]
         if col_idx >= len(row):
             raise PortfolioMalformedError(
                 f"Malformed open-position row {row_idx}: missing field `{logical_field}` "
+                f"at expected column index {col_idx}."
+            )
+        return row[col_idx]
+
+    def _find_closed_position_sheet(self, workbook: Workbook) -> Worksheet | None:
+        # 1. Exact match.
+        if _CLOSED_SHEET_NAME in workbook.sheetnames:
+            return workbook[_CLOSED_SHEET_NAME]
+        # 2. Normalized match (case-insensitive, whitespace-tolerant).
+        target = _normalize_label(_CLOSED_SHEET_NAME)
+        for name in workbook.sheetnames:
+            if _normalize_label(name) == target:
+                log.info("Closed-position sheet found via normalized match: %r", name)
+                return workbook[name]
+        # 3. Semantic fallback by column structure.
+        semantic = [n for n in workbook.sheetnames if _sheet_has_closed_position_table(workbook[n])]
+        if len(semantic) == 1:
+            log.info("No closed-sheet name match; using semantic fallback: %r", semantic[0])
+            return workbook[semantic[0]]
+        if len(semantic) > 1:
+            raise PortfolioMalformedError(
+                f"Multiple sheets contain the closed-position table columns; cannot choose "
+                f"automatically. Ambiguous sheets: {semantic}. "
+                f"All sheets: {workbook.sheetnames}"
+            )
+        return None
+
+    def _parse_closed_positions(self, workbook: Workbook) -> list[ClosedPosition]:
+        sheet = self._find_closed_position_sheet(workbook)
+        if sheet is None:
+            return []
+        has_cells = any(
+            cell is not None
+            for row in sheet.iter_rows(
+                min_row=1, max_row=_CLOSED_POSITION_HEADER_SCAN_ROWS, values_only=True
+            )
+            for cell in row
+        )
+        if not has_cells:
+            return []
+        header_row_idx, columns = _find_labelled_row(
+            sheet,
+            schema=_CLOSED_POSITION_COLUMN_SCHEMA,
+            max_scan_rows=_CLOSED_POSITION_HEADER_SCAN_ROWS,
+        )
+
+        closed_positions: list[ClosedPosition] = []
+        for row_idx, row in enumerate(
+            sheet.iter_rows(min_row=header_row_idx + 1, values_only=True),
+            start=header_row_idx + 1,
+        ):
+            first = row[columns["position_id"]] if columns["position_id"] < len(row) else None
+            if first is None:
+                continue
+            if not isinstance(first, int | float):
+                break
+            closed_positions.append(self._row_to_closed_position(row, columns, row_idx))
+        return closed_positions
+
+    def _row_to_closed_position(
+        self, row: RawDataRow, columns: ColumnIndexes, row_idx: int
+    ) -> ClosedPosition:
+        position_id_raw = self._closed_row_cell(row, columns, row_idx, "position_id")
+        symbol_raw = self._closed_row_cell(row, columns, row_idx, "symbol")
+        type_raw = self._closed_row_cell(row, columns, row_idx, "type")
+        volume_raw = self._closed_row_cell(row, columns, row_idx, "volume")
+        open_time_raw = self._closed_row_cell(row, columns, row_idx, "open_time")
+        open_price_raw = self._closed_row_cell(row, columns, row_idx, "open_price")
+        close_time_raw = self._closed_row_cell(row, columns, row_idx, "close_time")
+        close_price_raw = self._closed_row_cell(row, columns, row_idx, "close_price")
+        purchase_value_raw = self._closed_row_cell(row, columns, row_idx, "purchase_value")
+        gross_pl_raw = self._closed_row_cell(row, columns, row_idx, "gross_pl")
+
+        try:
+            position_type = PositionType(type_raw)
+        except Exception as exc:
+            raise _closed_position_row_error(row_idx, "type", type_raw, exc) from exc
+        try:
+            volume = _cell_to_decimal(volume_raw)
+        except Exception as exc:
+            raise _closed_position_row_error(row_idx, "volume", volume_raw, exc) from exc
+        try:
+            open_time = _naive_dt_to_warsaw(open_time_raw)
+        except Exception as exc:
+            raise _closed_position_row_error(row_idx, "open_time", open_time_raw, exc) from exc
+        try:
+            open_price = _cell_to_decimal(open_price_raw)
+        except Exception as exc:
+            raise _closed_position_row_error(row_idx, "open_price", open_price_raw, exc) from exc
+        if open_price <= 0:
+            raise _closed_position_row_error(
+                row_idx,
+                "open_price",
+                open_price_raw,
+                ValueError(f"open_price must be positive (got {open_price})"),
+            )
+        try:
+            close_time = _naive_dt_to_warsaw(close_time_raw)
+        except Exception as exc:
+            raise _closed_position_row_error(row_idx, "close_time", close_time_raw, exc) from exc
+        try:
+            close_price = _cell_to_decimal(close_price_raw)
+        except Exception as exc:
+            raise _closed_position_row_error(row_idx, "close_price", close_price_raw, exc) from exc
+        if close_price <= 0:
+            raise _closed_position_row_error(
+                row_idx,
+                "close_price",
+                close_price_raw,
+                ValueError(f"close_price must be positive (got {close_price})"),
+            )
+        try:
+            purchase_value = _cell_to_decimal(purchase_value_raw)
+        except Exception as exc:
+            raise _closed_position_row_error(
+                row_idx, "purchase_value", purchase_value_raw, exc
+            ) from exc
+        try:
+            gross_pl = _cell_to_decimal(gross_pl_raw)
+        except Exception as exc:
+            raise _closed_position_row_error(row_idx, "gross_pl", gross_pl_raw, exc) from exc
+        try:
+            position_id = _cell_to_int(position_id_raw)
+        except Exception as exc:
+            raise _closed_position_row_error(row_idx, "position_id", position_id_raw, exc) from exc
+
+        return ClosedPosition(
+            id=position_id,
+            symbol=str(symbol_raw),
+            type=position_type,
+            volume=volume,
+            open_time=open_time,
+            close_time=close_time,
+            open_price=open_price,
+            close_price=close_price,
+            purchase_value_pln=purchase_value,
+            gross_pl_pln=gross_pl,
+        )
+
+    def _closed_row_cell(
+        self, row: RawDataRow, columns: ColumnIndexes, row_idx: int, logical_field: str
+    ) -> RawCellValue:
+        col_idx = columns[logical_field]
+        if col_idx >= len(row):
+            raise PortfolioMalformedError(
+                f"Malformed closed-position row {row_idx}: missing field `{logical_field}` "
                 f"at expected column index {col_idx}."
             )
         return row[col_idx]
@@ -353,12 +534,28 @@ def _sheet_has_position_table(
     return False
 
 
+def _sheet_has_closed_position_table(
+    sheet: Worksheet, max_scan_rows: int = _CLOSED_POSITION_HEADER_SCAN_ROWS
+) -> bool:
+    required_count = len(_CLOSED_POSITION_COLUMN_SCHEMA)
+    for row in sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True):
+        present = {_normalize_label(str(cell)) for cell in row if isinstance(cell, str)}
+        covered = sum(
+            1
+            for aliases in _CLOSED_POSITION_COLUMN_SCHEMA.values()
+            if any(_normalize_label(a) in present for a in aliases)
+        )
+        if covered == required_count:
+            return True
+    return False
+
+
 def _find_labelled_row(
     sheet: Worksheet,
     *,
-    schema: dict[str, frozenset[str]],
+    schema: ColumnSchema,
     max_scan_rows: int,
-) -> tuple[int, dict[str, int]]:
+) -> tuple[int, ColumnIndexes]:
     normalized_schema = {
         logical: {_normalize_label(a) for a in aliases} for logical, aliases in schema.items()
     }
@@ -370,7 +567,7 @@ def _find_labelled_row(
             for idx, cell in enumerate(row)
             if isinstance(cell, str)
         }
-        columns: dict[str, int] = {}
+        columns: ColumnIndexes = {}
         for logical, norm_aliases in normalized_schema.items():
             for alias in norm_aliases:
                 if alias in norm_row:
@@ -387,7 +584,7 @@ def _find_labelled_row(
     )
 
 
-def _cell_to_decimal(value: Any) -> Decimal:
+def _cell_to_decimal(value: RawCellValue) -> Decimal:
     if value is None:
         raise PortfolioMalformedError("Expected number, got None")
     if isinstance(value, Decimal):
@@ -395,7 +592,13 @@ def _cell_to_decimal(value: Any) -> Decimal:
     return Decimal(str(value))
 
 
-def _naive_dt_to_warsaw(value: Any) -> datetime:
+def _cell_to_int(value: RawCellValue) -> int:
+    if isinstance(value, str | int | float | Decimal):
+        return int(value)
+    raise PortfolioMalformedError(f"Expected integer-compatible value, got {type(value).__name__}")
+
+
+def _naive_dt_to_warsaw(value: RawCellValue) -> datetime:
     if not isinstance(value, datetime):
         raise PortfolioMalformedError(f"Expected datetime, got {type(value).__name__}")
     return value.replace(tzinfo=WARSAW) if value.tzinfo is None else value.astimezone(WARSAW)
@@ -414,7 +617,7 @@ def _find_export_datetime(sheet: Worksheet) -> datetime:
 
 
 def _position_row_error(
-    row_idx: int, field_name: str, value: Any, exc: Exception
+    row_idx: int, field_name: str, value: RawCellValue, exc: Exception
 ) -> PortfolioMalformedError:
     return PortfolioMalformedError(
         f"Malformed open-position row {row_idx}, field `{field_name}` "
@@ -422,7 +625,16 @@ def _position_row_error(
     )
 
 
-def _normalize_stop_loss(value: Any) -> Decimal | None:
+def _closed_position_row_error(
+    row_idx: int, field_name: str, value: RawCellValue, exc: Exception
+) -> PortfolioMalformedError:
+    return PortfolioMalformedError(
+        f"Malformed closed-position row {row_idx}, field `{field_name}` "
+        f"(value={value!r}, type={type(value).__name__}): {exc}"
+    )
+
+
+def _normalize_stop_loss(value: RawCellValue) -> Decimal | None:
     if value is None:
         return None
     if isinstance(value, str):

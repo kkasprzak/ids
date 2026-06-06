@@ -9,9 +9,13 @@ The codebase is organised around four layers:
 - **Domain** — pure domain models and rules. Functions take domain models as input and return domain models or simple value types as output. No I/O, no global state, no library-specific types in signatures.
 - **Application** — use-case logic and ports. It defines `Protocol` contracts for required I/O, projects domain models into report view models, and depends only on the domain.
 - **Infrastructure** — concrete implementations of I/O. Adapters implement application ports and translate between external formats (XLSX, Markdown, JSONL, file system) and application/domain models.
-- **Presentation** — user-facing delivery adapters and composition roots. The current presentation adapter is a `typer` CLI that wires infrastructure adapters into application functions.
+- **Presentation** — user-facing delivery adapters. The current presentation adapter is a `typer` CLI that parses user input, delegates to injected application actions, and renders user-facing output.
 
-The boundary contract is strict: domain code never imports `pandas`, `matplotlib`, `openpyxl`, `yaml`, `frontmatter`, `jinja2`, or any I/O library at module level. Those imports live exclusively inside infrastructure modules. Application code also never imports infrastructure or presentation code. Import-linter enforces the dependency flow `presentation -> infrastructure -> application -> domain`.
+The boundary contract is strict: domain code never imports `pandas`, `matplotlib`, `openpyxl`, `yaml`, `frontmatter`, `jinja2`, or any I/O library at module level. Validation libraries such as `pydantic` are also boundary tools: they may be used by adapters to validate external payloads, but domain and application code must not import them. Application code never imports infrastructure or presentation code. Presentation code also never imports infrastructure code; concrete adapter wiring lives in the composition root. Import-linter enforces the user-facing dependency flow `presentation -> application -> domain`.
+
+## Composition root
+
+`ids.bootstrap` is the composition root for the CLI application. It is the only production module that imports concrete infrastructure adapters and wires them into application use cases. This keeps presentation code focused on CLI concerns while infrastructure remains hidden behind application ports.
 
 ## Project layout
 
@@ -20,10 +24,11 @@ The boundary contract is strict: domain code never imports `pandas`, `matplotlib
 
 ```
 src/ids/
+├── bootstrap.py      ← composition root for the CLI application
 ├── domain/          ← pure domain models and rules
 ├── application/     ← use cases, ports, report view models
 ├── infrastructure/  ← I/O implementations
-└── presentation/    ← delivery adapters and composition roots
+└── presentation/    ← delivery adapters
 
 tests/             ← see "Test strategy" section
 
@@ -69,6 +74,7 @@ specs/                              (user stories — see PRD section 6)
 ### Datetime
 
 - All `datetime` values in the domain are *aware* and in `Europe/Warsaw`.
+- JSONL snapshot storage persists `datetime` values in UTC (for example `2026-05-02T08:00:00Z`) and converts them back to `Europe/Warsaw` when rebuilding domain models.
 - The XTB loader localises naive XLSX timestamps on ingestion; nothing else in the system needs to know about timezones.
 - Period boundaries (e.g., "April 2026") are constructed as aware datetimes at midnight Warsaw time.
 
@@ -134,7 +140,7 @@ Running a report command twice for the same period produces the same output, ass
 
 ### Snapshot store
 
-Every report run persists the parsed `PortfolioSnapshot` to `outputs/snapshots/<as_of>.jsonl` before rendering. This is the substrate for all time-series views (equity curve, drawdown, Discipline Twin). The store is local-only by default — `outputs/` is gitignored to keep personal financial data private. One file per `as_of_date`, deterministically serialized. An owner who wants to version snapshots privately should do so in a separate private repo, not the public codebase.
+Every report run persists the parsed `PortfolioSnapshot` to `outputs/snapshots/<as_of>.jsonl` before rendering. This is the substrate for all time-series views (equity curve, drawdown, Discipline Twin). The store is local-only by default — `outputs/` is gitignored to keep personal financial data private. One file per `as_of_date`, deterministically serialized, with `datetime` fields stored in UTC. An owner who wants to version snapshots privately should do so in a separate private repo, not the public codebase.
 
 ## Presentation and CLI structure
 
@@ -170,4 +176,4 @@ tests/
 ## Quality gates
 
 - **Pre-commit hooks** run `ruff check` and `ruff format` on staged files. Type checks and tests are not in pre-commit (they run in CI).
-- **CI (GitHub Actions)** runs on every push: `ruff check`, `ruff format --check`, `pyright`, `pytest -m unit`, `pytest`.
+- **CI (GitHub Actions)** runs on every push: `ruff check`, `ruff format --check`, `basedpyright`, `pytest -m unit`, `pytest`.

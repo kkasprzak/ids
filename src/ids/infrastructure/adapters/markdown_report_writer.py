@@ -1,5 +1,7 @@
+from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
@@ -13,6 +15,8 @@ from ids.infrastructure.adapters.formatters import (
     format_price,
 )
 
+type DecimalReportFilter = Callable[[Decimal], str]
+
 
 class MarkdownReportWriter(ReportWriter):
     def __init__(self) -> None:
@@ -25,7 +29,7 @@ class MarkdownReportWriter(ReportWriter):
             keep_trailing_newline=True,
         )
         filters = cast(
-            dict[str, Any],
+            dict[str, DecimalReportFilter],
             self._env.filters,  # pyright: ignore[reportUnknownMemberType,reportUnknownArgumentType]
         )
         filters["pln"] = format_pln

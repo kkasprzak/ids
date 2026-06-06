@@ -2,14 +2,22 @@ import os
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from openpyxl import Workbook, load_workbook
+from openpyxl.worksheet.worksheet import Worksheet
 
 from ids.application.ports.portfolio import NoPortfolioAvailableError, PortfolioMalformedError
 from ids.domain.timezones import WARSAW
-from ids.infrastructure.adapters.xtb_portfolio_loader import XTBPortfolioLoader
-from tests.infrastructure.adapters.conftest import _HEADER, make_xlsx
+from ids.infrastructure.adapters.xtb_portfolio_loader import XTBPortfolioLoader, _naive_dt_to_warsaw
+from tests.infrastructure.adapters.conftest import (
+    _CLOSED_HEADER,
+    _CLOSED_HEADER_ROW,
+    _HEADER,
+    WorkbookRowOverrides,
+    make_xlsx,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -22,13 +30,21 @@ def _export_name(as_of: str) -> str:
     return f"account_ikze_99999999_pl_xlsx_2024-12-31_{as_of}.xlsx"
 
 
-def _write_export(
+def _create_sheet(workbook: Workbook, title: str) -> Worksheet:
+    sheet: object = workbook.create_sheet(title)  # pyright: ignore[reportAny]
+    if not isinstance(sheet, Worksheet):
+        raise TypeError(f"Expected Worksheet from openpyxl, got {type(sheet).__name__}")
+    return sheet
+
+
+def _write_export(  # noqa: PLR0913
     input_dir: Path,
     *,
     as_of: str = "2026-05-02",
     balance: Decimal = Decimal("1"),
     equity: Decimal = Decimal("2"),
-    positions: list[dict] | None = None,
+    positions: list[WorkbookRowOverrides] | None = None,
+    closed_positions: list[WorkbookRowOverrides] | None = None,
 ) -> Path:
     path = input_dir / _export_name(as_of)
     make_xlsx(
@@ -37,6 +53,7 @@ def _write_export(
         equity=equity,
         export_dt=datetime.fromisoformat(f"{as_of}T10:30:00"),
         positions=[] if positions is None else positions,
+        closed_positions=[] if closed_positions is None else closed_positions,
     )
     return path
 
@@ -161,6 +178,7 @@ def test_non_ikze_file_silently_ignored(tmp_path: Path) -> None:
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 3, 10, 30),
         positions=[{"Symbol": "OTHER"}],
+        closed_positions=[],
     )
 
     snapshot = _loader(input_dir).load_latest()
@@ -175,6 +193,7 @@ def test_no_matching_files_raises_with_filename_list(tmp_path: Path) -> None:
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 3, 10, 30),
         positions=[],
+        closed_positions=[],
     )
 
     with pytest.raises(NoPortfolioAvailableError, match="no eligible fallback XLSX files"):
@@ -194,7 +213,7 @@ def test_missing_open_position_sheet_raises_malformed(tmp_path: Path) -> None:
     workbook = Workbook()
     assert workbook.active is not None
     workbook.active.title = "CLOSED POSITION HISTORY"
-    workbook.create_sheet("PENDING ORDERS HISTORY")
+    _create_sheet(workbook, "PENDING ORDERS HISTORY")
     workbook.save(path)
 
     with pytest.raises(PortfolioMalformedError, match="OPEN POSITION"):
@@ -210,6 +229,7 @@ def test_non_standard_sheet_name_loads_via_semantic_fallback(tmp_path: Path) -> 
         equity=Decimal("200.00"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[{"Symbol": "FALLBACK"}],
+        closed_positions=[],
     )
     wb = load_workbook(path)
     for ws in wb.worksheets:
@@ -230,12 +250,13 @@ def test_multiple_sheets_with_position_table_raises_ambiguity(tmp_path: Path) ->
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[{"Symbol": "ONE"}],
+        closed_positions=[],
     )
     wb = load_workbook(path)
     for ws in wb.worksheets:
         if ws.title.startswith("OPEN POSITION"):
             ws.title = "TABLE A"
-    dup = wb.create_sheet("TABLE B")
+    dup = _create_sheet(wb, "TABLE B")
     for col, name in enumerate(_HEADER, start=1):
         dup.cell(row=1, column=col, value=name)
     wb.save(path)
@@ -284,6 +305,7 @@ def test_load_from_path_non_matching_filename_uses_export_datetime(tmp_path: Pat
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[],
+        closed_positions=[],
     )
 
     snapshot = _loader(input_dir).load_from_path(path)
@@ -299,6 +321,7 @@ def test_load_from_path_rejects_file_from_other_ikze_account(tmp_path: Path) -> 
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[],
+        closed_positions=[],
     )
 
     with pytest.raises(PortfolioMalformedError, match="clearly belongs to IKZE account"):
@@ -315,6 +338,7 @@ def test_load_latest_falls_back_to_mtime_and_workbook_export_datetime(tmp_path: 
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 1, 10, 30),
         positions=[{"Symbol": "OLDER"}],
+        closed_positions=[],
     )
     make_xlsx(
         second,
@@ -322,6 +346,7 @@ def test_load_latest_falls_back_to_mtime_and_workbook_export_datetime(tmp_path: 
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 3, 10, 30),
         positions=[{"Symbol": "NEWER"}],
+        closed_positions=[],
     )
     first_mtime = datetime(2026, 5, 5, 10, 0).timestamp()
     second_mtime = datetime(2026, 5, 6, 10, 0).timestamp()
@@ -346,7 +371,7 @@ def _make_xlsx_with_row_offset(
     default = wb.active
     assert default is not None
     wb.remove(default)
-    ws = wb.create_sheet("OPEN POSITION 02052026")
+    ws = _create_sheet(wb, "OPEN POSITION 02052026")
 
     ws.cell(row=export_dt_row, column=2, value=datetime(2026, 5, 2, 10, 30))
     ws.cell(row=account_label_row, column=4, value="Balance")
@@ -400,6 +425,7 @@ def _make_xlsx_with_custom_headers(path: Path, headers: list[str]) -> None:
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[{"Symbol": "TEST"}],
+        closed_positions=[],
     )
     wb = load_workbook(path)
     ws = wb["OPEN POSITION 02052026"]
@@ -453,6 +479,7 @@ def _make_xlsx_with_custom_footer(path: Path, *, footer: str, n_positions: int =
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[{"Symbol": f"POS{i}"} for i in range(n_positions)],
+        closed_positions=[],
     )
     wb = load_workbook(path)
     ws = wb["OPEN POSITION 02052026"]
@@ -485,6 +512,7 @@ def test_malformed_position_row_with_numeric_id_raises_error(tmp_path: Path) -> 
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[{"Symbol": "GOOD"}],
+        closed_positions=[],
     )
     wb = load_workbook(path)
     ws = wb["OPEN POSITION 02052026"]
@@ -516,6 +544,7 @@ def test_invalid_position_type_reports_row_and_field(tmp_path: Path) -> None:
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[{"Type": "NOT_A_POSITION_TYPE"}],
+        closed_positions=[],
     )
 
     with pytest.raises(PortfolioMalformedError, match=r"row 8, field `type`"):
@@ -530,6 +559,7 @@ def test_invalid_open_time_reports_row_and_field(tmp_path: Path) -> None:
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[{"Open time": "NOT_A_DATETIME"}],
+        closed_positions=[],
     )
 
     with pytest.raises(PortfolioMalformedError, match=r"row 8, field `open_time`"):
@@ -544,7 +574,419 @@ def test_missing_numeric_cell_reports_row_and_field(tmp_path: Path) -> None:
         equity=Decimal("2"),
         export_dt=datetime(2026, 5, 2, 10, 30),
         positions=[{"Open price": None}],
+        closed_positions=[],
     )
 
     with pytest.raises(PortfolioMalformedError, match=r"row 8, field `open_price`"):
         _loader(tmp_path / "inputs").load_latest()
+
+
+# ---------------------------------------------------------------------------
+# Closed positions
+# ---------------------------------------------------------------------------
+
+
+def test_single_closed_position_parsed_correctly(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(
+        input_dir,
+        closed_positions=[
+            {
+                "Position": 501,
+                "Symbol": "VWCE.DE",
+                "Type": "BUY",
+                "Volume": Decimal("2"),
+                "Open time": datetime(2026, 1, 10, 9, 0),
+                "Open price": Decimal("95.00"),
+                "Close time": datetime(2026, 5, 1, 15, 0),
+                "Close price": Decimal("102.50"),
+                "Purchase value": Decimal("190.00"),
+                "Gross P/L": Decimal("15.00"),
+            }
+        ],
+    )
+
+    snapshot = _loader(input_dir).load_latest()
+
+    assert len(snapshot.closed_positions) == 1
+    cp = snapshot.closed_positions[0]
+    assert cp.id == 501  # noqa: PLR2004
+    assert cp.symbol == "VWCE.DE"
+    assert cp.open_price == Decimal("95.00")
+    assert cp.close_price == Decimal("102.50")
+    assert cp.purchase_value_pln == Decimal("190.00")
+    assert cp.gross_pl_pln == Decimal("15.00")
+    assert cp.open_time.tzinfo == WARSAW
+    assert cp.close_time.tzinfo == WARSAW
+
+
+def test_mix_open_and_closed_positions(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(
+        input_dir,
+        positions=[{"Position": 11, "Symbol": "OPEN1"}],
+        closed_positions=[
+            {"Position": 501, "Symbol": "CLOSED1"},
+            {"Position": 502, "Symbol": "CLOSED2"},
+        ],
+    )
+
+    snapshot = _loader(input_dir).load_latest()
+
+    assert len(snapshot.positions) == 1
+    assert snapshot.positions[0].symbol == "OPEN1"
+    assert len(snapshot.closed_positions) == 2  # noqa: PLR2004
+    assert tuple(cp.symbol for cp in snapshot.closed_positions) == ("CLOSED1", "CLOSED2")
+
+
+def test_empty_closed_sheet_yields_empty_tuple(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(input_dir)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions == ()
+
+
+def test_malformed_closed_position_row_raises_error(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    export_dt = datetime(2026, 5, 2, 10, 30)
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=export_dt,
+        positions=[],
+        closed_positions=[{"Close price": "NOT_A_NUMBER"}],
+    )
+
+    with pytest.raises(
+        PortfolioMalformedError, match=r"closed-position row 12, field `close_price`"
+    ):
+        _loader(input_dir).load_latest()
+
+
+def _make_xlsx_with_closed_header_at_row(
+    path: Path,
+    *,
+    closed_header_row: int,
+    extra_cells_in_scan_window: bool = False,
+) -> None:
+    """Write a workbook where the closed-position header is at a custom row.
+
+    If extra_cells_in_scan_window is True, writes a dummy cell at row 1 of the
+    CLOSED sheet so the empty-sheet check (rows 1..15) sees content even when the
+    header is beyond row 15.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    export_dt = datetime(2026, 5, 2, 10, 30)
+    wb = Workbook()
+    default = wb.active
+    assert default is not None
+    wb.remove(default)
+
+    closed_ws = _create_sheet(wb, "CLOSED POSITION HISTORY")
+    if extra_cells_in_scan_window:
+        closed_ws.cell(row=1, column=1, value="DUMMY")
+    for col, name in enumerate(_CLOSED_HEADER, start=1):
+        closed_ws.cell(row=closed_header_row, column=col, value=name)
+    closed_ws.cell(row=closed_header_row + 1, column=1, value=888)
+    closed_ws.cell(row=closed_header_row + 1, column=2, value="OFFSET")
+    closed_ws.cell(row=closed_header_row + 1, column=3, value="BUY")
+    closed_ws.cell(row=closed_header_row + 1, column=4, value=1.0)
+    closed_ws.cell(row=closed_header_row + 1, column=5, value=export_dt)
+    closed_ws.cell(row=closed_header_row + 1, column=6, value=100.0)
+    closed_ws.cell(row=closed_header_row + 1, column=7, value=export_dt)
+    closed_ws.cell(row=closed_header_row + 1, column=8, value=110.0)
+    closed_ws.cell(row=closed_header_row + 1, column=11, value=100.0)
+    closed_ws.cell(row=closed_header_row + 1, column=19, value=10.0)
+
+    open_ws = _create_sheet(wb, f"OPEN POSITION {export_dt.strftime('%d%m%Y')}")
+    open_ws.cell(row=3, column=2, value=export_dt)
+    open_ws.cell(row=4, column=4, value="Balance")
+    open_ws.cell(row=4, column=7, value="Equity")
+    open_ws.cell(row=5, column=4, value=1000.0)
+    open_ws.cell(row=5, column=7, value=2000.0)
+    for col, name in enumerate(_HEADER, start=1):
+        open_ws.cell(row=7, column=col, value=name)
+    open_ws.cell(row=8, column=1, value="Total")
+    wb.save(path)
+
+
+def test_closed_header_at_row_5_found(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_header_at_row(path, closed_header_row=5)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.closed_positions[0].symbol == "OFFSET"
+
+
+def test_closed_header_at_row_15_found(tmp_path: Path) -> None:
+    """Header at the last row of the scan window (15) must still be discovered."""
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_header_at_row(path, closed_header_row=15)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert snapshot.closed_positions[0].symbol == "OFFSET"
+
+
+def test_closed_header_at_row_16_with_content_raises_malformed(tmp_path: Path) -> None:
+    """Header beyond scan window (row 16) with cells in rows 1-15 → PortfolioMalformedError."""
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_header_at_row(
+        path, closed_header_row=16, extra_cells_in_scan_window=True
+    )
+
+    with pytest.raises(PortfolioMalformedError, match="required columns"):
+        _loader(tmp_path / "inputs").load_latest()
+
+
+def test_closed_sheet_with_partial_header_raises_malformed(tmp_path: Path) -> None:
+    """CLOSED sheet has cells but is missing a required column → raises PortfolioMalformedError."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501}],
+    )
+    wb = load_workbook(path)
+    ws = wb["CLOSED POSITION HISTORY"]
+    gross_pl_col = _CLOSED_HEADER.index("Gross P/L") + 1
+    ws.cell(row=_CLOSED_HEADER_ROW, column=gross_pl_col, value="REMOVED_COLUMN")
+    wb.save(path)
+
+    with pytest.raises(PortfolioMalformedError, match="gross_pl"):
+        _loader(input_dir).load_latest()
+
+
+def test_closed_sheet_with_renamed_column_raises_malformed(tmp_path: Path) -> None:
+    """CLOSED sheet with all columns present but one renamed → raises PortfolioMalformedError."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501}],
+    )
+    wb = load_workbook(path)
+    ws = wb["CLOSED POSITION HISTORY"]
+    close_price_col = _CLOSED_HEADER.index("Close price") + 1
+    ws.cell(row=_CLOSED_HEADER_ROW, column=close_price_col, value="Closing price")
+    wb.save(path)
+
+    with pytest.raises(PortfolioMalformedError, match="close_price"):
+        _loader(input_dir).load_latest()
+
+
+def test_closed_position_with_zero_open_price_raises_with_row_context(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(input_dir, closed_positions=[{"Open price": Decimal("0")}])
+
+    with pytest.raises(PortfolioMalformedError, match=r"closed-position row 12.*open_price"):
+        _loader(input_dir).load_latest()
+
+
+def test_closed_position_with_zero_close_price_raises_with_row_context(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(input_dir, closed_positions=[{"Close price": Decimal("0")}])
+
+    with pytest.raises(PortfolioMalformedError, match=r"closed-position row 12.*close_price"):
+        _loader(input_dir).load_latest()
+
+
+def test_position_with_zero_open_price_raises_with_row_context(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(input_dir, positions=[{"Open price": Decimal("0")}])
+
+    with pytest.raises(PortfolioMalformedError, match=r"open-position row 8.*open_price"):
+        _loader(input_dir).load_latest()
+
+
+def test_position_with_zero_market_price_raises_with_row_context(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(input_dir, positions=[{"Market price": Decimal("0")}])
+
+    with pytest.raises(PortfolioMalformedError, match=r"open-position row 8.*market_price"):
+        _loader(input_dir).load_latest()
+
+
+def test_workbook_without_closed_sheet_yields_empty_closed_positions(tmp_path: Path) -> None:
+    """Workbook with no CLOSED POSITION HISTORY sheet at all → closed_positions = ()."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb = Workbook()
+    default = wb.active
+    assert default is not None
+    wb.remove(default)
+    ws = _create_sheet(wb, "OPEN POSITION 02052026")
+    export_dt = datetime(2026, 5, 2, 10, 30)
+    ws.cell(row=3, column=2, value=export_dt)
+    ws.cell(row=4, column=4, value="Balance")
+    ws.cell(row=4, column=7, value="Equity")
+    ws.cell(row=5, column=4, value=1000.0)
+    ws.cell(row=5, column=7, value=2000.0)
+    for col, name in enumerate(_HEADER, start=1):
+        ws.cell(row=7, column=col, value=name)
+    ws.cell(row=8, column=1, value="Total")
+    wb.save(path)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions == ()
+
+
+# ---------------------------------------------------------------------------
+# _naive_dt_to_warsaw unit tests (tz-aware branch)
+# openpyxl rejects tz-aware datetimes on write, so the astimezone branch
+# cannot be reached through the xlsx loader in practice. Test it directly.
+# ---------------------------------------------------------------------------
+
+
+def test_naive_dt_to_warsaw_naive_input_attaches_warsaw_tz() -> None:
+    naive = datetime(2026, 1, 10, 9, 0)
+    result = _naive_dt_to_warsaw(naive)
+    assert result.tzinfo == WARSAW
+    assert result.replace(tzinfo=None) == naive
+
+
+def test_naive_dt_to_warsaw_utc_input_converts_to_warsaw() -> None:
+    utc = datetime(2026, 1, 10, 8, 0, tzinfo=ZoneInfo("UTC"))
+    result = _naive_dt_to_warsaw(utc)
+    assert result.tzinfo == WARSAW
+    assert result == datetime(2026, 1, 10, 9, 0, tzinfo=WARSAW)
+
+
+def _make_xlsx_with_closed_footer(path: Path, *, footer: str, n_positions: int = 2) -> None:
+    """Write a workbook with a custom footer row in the CLOSED POSITION HISTORY sheet."""
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Symbol": f"CP{i}"} for i in range(n_positions)],
+    )
+    wb = load_workbook(path)
+    ws = wb["CLOSED POSITION HISTORY"]
+    footer_row = _CLOSED_HEADER_ROW + 1 + n_positions
+    ws.cell(row=footer_row, column=1, value=footer)
+    wb.save(path)
+
+
+def test_closed_uppercase_total_footer_stops_parsing(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_footer(path, footer="TOTAL", n_positions=2)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert len(snapshot.closed_positions) == 2  # noqa: PLR2004
+
+
+def test_closed_footer_with_surrounding_spaces_stops_parsing(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_footer(path, footer="  Total  ", n_positions=1)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert len(snapshot.closed_positions) == 1
+
+
+def test_closed_localized_footer_stops_parsing(tmp_path: Path) -> None:
+    path = tmp_path / "inputs" / _export_name("2026-05-02")
+    _make_xlsx_with_closed_footer(path, footer="Razem", n_positions=2)
+
+    snapshot = _loader(tmp_path / "inputs").load_latest()
+    assert len(snapshot.closed_positions) == 2  # noqa: PLR2004
+
+
+# ---------------------------------------------------------------------------
+# FU2: tolerant CLOSED sheet name lookup
+# ---------------------------------------------------------------------------
+
+
+def test_closed_sheet_case_insensitive_name_match(tmp_path: Path) -> None:
+    """CLOSED sheet renamed to sentence-case → still parsed via normalized lookup."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501, "Symbol": "CASE"}],
+    )
+    wb = load_workbook(path)
+    wb["CLOSED POSITION HISTORY"].title = "Closed Position History"
+    wb.save(path)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions[0].symbol == "CASE"
+
+
+def test_closed_sheet_with_trailing_whitespace_name_match(tmp_path: Path) -> None:
+    """CLOSED sheet name with trailing space → parsed via normalized lookup."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501, "Symbol": "SPACE"}],
+    )
+    wb = load_workbook(path)
+    wb["CLOSED POSITION HISTORY"].title = "CLOSED POSITION HISTORY "
+    wb.save(path)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions[0].symbol == "SPACE"
+
+
+def test_closed_sheet_semantic_fallback_when_name_differs(tmp_path: Path) -> None:
+    """CLOSED sheet renamed completely → parsed via column-structure semantic fallback."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501, "Symbol": "FALLBACK"}],
+    )
+    wb = load_workbook(path)
+    wb["CLOSED POSITION HISTORY"].title = "HISTORIA POZYCJI"
+    wb.save(path)
+
+    snapshot = _loader(input_dir).load_latest()
+    assert snapshot.closed_positions[0].symbol == "FALLBACK"
+
+
+def test_multiple_closed_position_schema_sheets_raises_ambiguity(tmp_path: Path) -> None:
+    """Two sheets with closed-position schema → PortfolioMalformedError with ambiguity message."""
+    input_dir = tmp_path / "inputs"
+    path = input_dir / _export_name("2026-05-02")
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 2, 10, 30),
+        positions=[],
+        closed_positions=[{"Position": 501}],
+    )
+    wb = load_workbook(path)
+    wb["CLOSED POSITION HISTORY"].title = "CLOSED A"
+    dup = _create_sheet(wb, "CLOSED B")
+    for col, name in enumerate(_CLOSED_HEADER, start=1):
+        dup.cell(row=_CLOSED_HEADER_ROW, column=col, value=name)
+    wb.save(path)
+
+    with pytest.raises(PortfolioMalformedError, match="Ambiguous"):
+        _loader(input_dir).load_latest()

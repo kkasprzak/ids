@@ -6,6 +6,7 @@ from ids.application.ports.portfolio import (
 )
 from ids.application.ports.report_writer import ReportWriter, ReportWriterError
 from ids.application.ports.snapshot_store import (
+    SnapshotMalformedError,
     SnapshotNotFoundError,
     SnapshotStore,
     SnapshotStoreError,
@@ -18,6 +19,7 @@ __all__ = [
     "PortfolioMalformedError",
     "ReportWriter",
     "ReportWriterError",
+    "SnapshotMalformedError",
     "SnapshotNotFoundError",
     "SnapshotStore",
     "SnapshotStoreError",

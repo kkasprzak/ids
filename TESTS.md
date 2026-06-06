@@ -116,7 +116,7 @@ or footer/sheet-discovery logic.
 ### `test_jsonl_snapshot_store.py` — snapshot persistence
 
 Protects `JSONLSnapshotStore` in `src/ids/adapters/jsonl_snapshot_store.py`.
-Covers save/load round-trip, multiple snapshots per file, schema versioning, not-found errors.
+Covers save/load round-trip, UTC datetime serialization, schema versioning, not-found errors, and malformed snapshot errors.
 
 **When to inspect:** any change to snapshot serialisation or the `SnapshotStore` port.
 
@@ -210,8 +210,10 @@ uv run pytest --cov=ids          # with coverage
 # Quality gates (run before committing)
 uv run ruff check .
 uv run ruff format --check .
-uv run pyright
+uv run basedpyright
 ```
+
+`basedpyright` is the strict typing gate and fails on `Any` leaks.
 
 All markers are defined in `pyproject.toml`. Tests marked `unit` complete in milliseconds.
 `tmp_path` tests are slightly slower but still under 1 second for the full suite.

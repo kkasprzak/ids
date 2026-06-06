@@ -1,11 +1,11 @@
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from ids.application.use_cases.generate_weekly_report import generate_weekly_report
+from ids.application.viewmodels import WeeklySnapshotView
 from ids.domain.models import AccountSummary, PortfolioSnapshot
 from ids.domain.timezones import WARSAW
 
@@ -45,9 +45,9 @@ class _StoreSpy:
 
 class _WriterSpy:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, Any]] = []
+        self.calls: list[tuple[str, WeeklySnapshotView]] = []
 
-    def write_weekly(self, view: Any, output_path: str) -> None:
+    def write_weekly(self, view: WeeklySnapshotView, output_path: str) -> None:
         self.calls.append((output_path, view))
 
 

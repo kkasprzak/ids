@@ -7,8 +7,8 @@ from openpyxl import Workbook
 from typer.testing import CliRunner
 
 import ids.presentation.cli.report as report_cli
+from ids.bootstrap import app
 from ids.domain.timezones import WARSAW
-from ids.presentation.cli import app
 
 pytestmark = pytest.mark.e2e
 

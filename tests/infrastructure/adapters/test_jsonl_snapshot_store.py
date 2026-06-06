@@ -1,11 +1,12 @@
+import json
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from ids.application.ports import SnapshotNotFoundError
+from ids.application.ports import SnapshotMalformedError, SnapshotNotFoundError
 from ids.domain.models import ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.timezones import WARSAW
 from ids.infrastructure.adapters.jsonl_snapshot_store import JSONLSnapshotStore
@@ -13,14 +14,96 @@ from ids.infrastructure.adapters.jsonl_snapshot_store import JSONLSnapshotStore
 pytestmark = pytest.mark.integration
 SCHEMA_V1 = 1
 SCHEMA_V2 = 2
+DEFAULT_AS_OF_DATE = date(2026, 5, 2)
+
+type JSONValue = str | int | bool | None | list[JSONValue] | dict[str, JSONValue]
+type JSONPayload = dict[str, JSONValue]
 
 
 def _store(tmp_path: Path) -> JSONLSnapshotStore:
     return JSONLSnapshotStore(root=tmp_path / "outputs" / "snapshots")
 
 
-def _snapshot_path(tmp_path: Path, as_of: date = date(2026, 5, 2)) -> Path:
+def _snapshot_path(tmp_path: Path, as_of: date = DEFAULT_AS_OF_DATE) -> Path:
     return tmp_path / "outputs" / "snapshots" / f"{as_of.isoformat()}.jsonl"
+
+
+def _utc_json(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _account_payload(**overrides: JSONValue) -> JSONPayload:
+    payload: JSONPayload = {
+        "balance_pln": "1",
+        "equity_pln": "2",
+        "export_datetime": "2026-05-02T10:00:00+02:00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _position_payload(**overrides: JSONValue) -> JSONPayload:
+    payload: JSONPayload = {
+        "id": 1,
+        "symbol": "AAA.PL",
+        "type": "BUY",
+        "volume": "1",
+        "open_time": "2026-05-01T10:00:00+02:00",
+        "open_price": "100",
+        "market_price": "110",
+        "purchase_value_pln": "100",
+        "gross_pl_pln": "10",
+        "sl": None,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _closed_position_payload(**overrides: JSONValue) -> JSONPayload:
+    payload: JSONPayload = {
+        "id": 123,
+        "symbol": "AAA.PL",
+        "type": "BUY",
+        "volume": "1",
+        "open_time": "2026-05-01T10:00:00+02:00",
+        "close_time": "2026-05-08T10:00:00+02:00",
+        "open_price": "100",
+        "close_price": "110",
+        "purchase_value_pln": "100",
+        "gross_pl_pln": "10",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _snapshot_payload_v2(**overrides: JSONValue) -> JSONPayload:
+    payload: JSONPayload = {
+        "schema_version": SCHEMA_V2,
+        "as_of_date": DEFAULT_AS_OF_DATE.isoformat(),
+        "source_id": "x",
+        "account": _account_payload(),
+        "positions": [],
+        "closed_positions": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _snapshot_payload_v1(**overrides: JSONValue) -> JSONPayload:
+    payload = _without(_snapshot_payload_v2(schema_version=SCHEMA_V1), "closed_positions")
+    payload.update(overrides)
+    return payload
+
+
+def _without(payload: JSONPayload, key: str) -> JSONPayload:
+    copied = dict(payload)
+    copied.pop(key)
+    return copied
+
+
+def _write_snapshot_payload(path: Path, payload: JSONPayload) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, separators=(",", ":")) + "\n", encoding="utf-8")
 
 
 def test_save_creates_file(tmp_path: Path, make_snapshot: Callable[..., PortfolioSnapshot]) -> None:
@@ -124,6 +207,71 @@ def test_save_idempotent(tmp_path: Path, make_snapshot: Callable[..., PortfolioS
     assert first == second
 
 
+def test_save_writes_stable_schema_v2_json_shape(
+    tmp_path: Path,
+    make_position: Callable[..., Position],
+    make_closed_position: Callable[..., ClosedPosition],
+    make_snapshot: Callable[..., PortfolioSnapshot],
+) -> None:
+    position_id = 7
+    closed_position_id = 1007
+    snapshot = make_snapshot(
+        positions=(
+            make_position(
+                id=position_id,
+                open_price=Decimal("39.995"),
+                market_price=Decimal("40.005"),
+                sl=None,
+            ),
+        ),
+        closed_positions=(make_closed_position(id=closed_position_id),),
+    )
+    store = _store(tmp_path)
+
+    store.save(snapshot)
+
+    raw_line = _snapshot_path(tmp_path).read_text(encoding="utf-8")
+    raw_payload: object = json.loads(raw_line)  # pyright: ignore[reportAny]
+    assert isinstance(raw_payload, dict)
+    payload = raw_payload
+    positions = payload["positions"]
+    closed_positions = payload["closed_positions"]
+    assert isinstance(positions, list)
+    assert isinstance(closed_positions, list)
+    position = positions[0]
+    closed_position = closed_positions[0]
+    assert isinstance(position, dict)
+    assert isinstance(closed_position, dict)
+
+    assert payload["schema_version"] == SCHEMA_V2
+    assert payload["as_of_date"] == snapshot.as_of_date.isoformat()
+    assert payload["source_id"] == snapshot.source_id
+    assert payload["account"]["balance_pln"] == str(snapshot.account.balance_pln)
+    assert payload["account"]["equity_pln"] == str(snapshot.account.equity_pln)
+    assert payload["account"]["export_datetime"] == _utc_json(snapshot.account.export_datetime)
+    assert position["id"] == position_id
+    assert position["open_time"] == _utc_json(snapshot.positions[0].open_time)
+    assert position["open_price"] == "39.995"
+    assert position["market_price"] == "40.005"
+    assert position["sl"] is None
+    assert closed_position["id"] == closed_position_id
+    assert closed_position["open_time"] == _utc_json(snapshot.closed_positions[0].open_time)
+    assert closed_position["close_time"] == _utc_json(snapshot.closed_positions[0].close_time)
+
+
+def test_save_rejects_naive_datetimes(
+    tmp_path: Path,
+    make_position: Callable[..., Position],
+    make_snapshot: Callable[..., PortfolioSnapshot],
+) -> None:
+    position = make_position(open_time=datetime(2026, 5, 2, 10, 0))
+    snapshot = make_snapshot(positions=(position,))
+    store = _store(tmp_path)
+
+    with pytest.raises(SnapshotMalformedError, match="timezone-aware"):
+        store.save(snapshot)
+
+
 def test_save_overwrites_same_as_of_date(
     tmp_path: Path,
     make_snapshot: Callable[..., PortfolioSnapshot],
@@ -140,11 +288,11 @@ def test_save_overwrites_same_as_of_date(
     assert loaded == second
 
 
-def test_load_missing_raises(tmp_path: Path) -> None:
+def test_load_missing_raises_snapshot_not_found(tmp_path: Path) -> None:
     store = _store(tmp_path)
 
     with pytest.raises(SnapshotNotFoundError):
-        store.load(date(2026, 5, 2))
+        store.load(DEFAULT_AS_OF_DATE)
 
 
 def test_list_all_orders_by_as_of_ascending(
@@ -174,50 +322,80 @@ def test_list_all_returns_empty_when_directory_missing(tmp_path: Path) -> None:
     assert store.list_all() == ()
 
 
-def test_unsupported_schema_version_raises(tmp_path: Path) -> None:
+def test_unsupported_schema_version_raises_snapshot_malformed(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    path = _snapshot_path(tmp_path)
+    _write_snapshot_payload(path, _snapshot_payload_v2(schema_version=3))
+
+    with pytest.raises(SnapshotMalformedError):
+        store.load(DEFAULT_AS_OF_DATE)
+
+
+def test_invalid_json_payload_raises_snapshot_malformed(tmp_path: Path) -> None:
     store = _store(tmp_path)
     path = _snapshot_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        '{"schema_version":3,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"1","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[]}\n',
-        encoding="utf-8",
-    )
+    path.write_text("{not valid json}\n", encoding="utf-8")
 
-    with pytest.raises(SnapshotNotFoundError):
-        store.load(date(2026, 5, 2))
+    with pytest.raises(SnapshotMalformedError, match="JSON"):
+        store.load(DEFAULT_AS_OF_DATE)
 
 
 def test_load_schema_v1_maps_missing_closed_positions_to_empty(tmp_path: Path) -> None:
     store = _store(tmp_path)
     path = _snapshot_path(tmp_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        '{"schema_version":1,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[]}\n',
-        encoding="utf-8",
-    )
+    _write_snapshot_payload(path, _snapshot_payload_v1())
 
-    loaded = store.load(date(2026, 5, 2))
+    loaded = store.load(DEFAULT_AS_OF_DATE)
 
     assert loaded.schema_version == 1
     assert loaded.closed_positions == ()
 
 
+def test_save_upgrades_loaded_v1_snapshot_to_v2(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    path = _snapshot_path(tmp_path)
+    _write_snapshot_payload(path, _snapshot_payload_v1())
+
+    loaded_v1 = store.load(DEFAULT_AS_OF_DATE)
+    assert loaded_v1.schema_version == SCHEMA_V1
+
+    store.save(loaded_v1)
+
+    raw_payload: object = json.loads(path.read_text(encoding="utf-8"))  # pyright: ignore[reportAny]
+    assert isinstance(raw_payload, dict)
+    assert raw_payload["schema_version"] == SCHEMA_V2
+    assert raw_payload["closed_positions"] == []
+    assert store.load(DEFAULT_AS_OF_DATE).schema_version == SCHEMA_V2
+
+
 def test_list_all_supports_mixed_schema_v1_v2_ordered_by_as_of(tmp_path: Path) -> None:
     store = _store(tmp_path)
     root = tmp_path / "outputs" / "snapshots"
-    root.mkdir(parents=True, exist_ok=True)
-    (root / "2026-05-02.jsonl").write_text(
-        '{"schema_version":1,"as_of_date":"2026-05-02","source_id":"v1","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[]}\n',
-        encoding="utf-8",
+    _write_snapshot_payload(
+        root / f"{DEFAULT_AS_OF_DATE.isoformat()}.jsonl",
+        _snapshot_payload_v1(source_id="v1"),
     )
-    (root / "2026-05-09.jsonl").write_text(
-        '{"schema_version":2,"as_of_date":"2026-05-09","source_id":"v2","account":{"balance_pln":"3","equity_pln":"4","export_datetime":"2026-05-09T10:00:00+02:00"},"positions":[],"closed_positions":[{"id":123,"symbol":"AAA.PL","type":"BUY","volume":"1","open_time":"2026-05-01T10:00:00+02:00","close_time":"2026-05-08T10:00:00+02:00","open_price":"100","close_price":"110","purchase_value_pln":"100","gross_pl_pln":"10"}]}\n',
-        encoding="utf-8",
+    _write_snapshot_payload(
+        root / "2026-05-09.jsonl",
+        _snapshot_payload_v2(
+            as_of_date="2026-05-09",
+            source_id="v2",
+            account=_account_payload(
+                balance_pln="3",
+                equity_pln="4",
+                export_datetime="2026-05-09T10:00:00+02:00",
+            ),
+            closed_positions=[_closed_position_payload()],
+        ),
     )
 
     listed = store.list_all()
 
-    assert tuple(snapshot.as_of_date for snapshot in listed) == (date(2026, 5, 2), date(2026, 5, 9))
+    assert tuple(snapshot.as_of_date for snapshot in listed) == (
+        DEFAULT_AS_OF_DATE,
+        date(2026, 5, 9),
+    )
     assert listed[0].schema_version == SCHEMA_V1
     assert listed[0].closed_positions == ()
     assert listed[1].schema_version == SCHEMA_V2
@@ -228,44 +406,67 @@ def test_list_all_supports_mixed_schema_v1_v2_ordered_by_as_of(tmp_path: Path) -
     ("payload", "error_match"),
     (
         (
-            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[]}\n',
+            _without(_snapshot_payload_v2(), "closed_positions"),
             "closed_positions",
         ),
         (
-            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":{},"closed_positions":[]}\n',
+            _snapshot_payload_v2(positions={}),
             "positions",
         ),
         (
-            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[],"closed_positions":{}}\n',
+            _snapshot_payload_v2(closed_positions={}),
             "closed_positions",
         ),
         (
-            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[123],"closed_positions":[]}\n',
+            _snapshot_payload_v2(positions=[123]),
             "positions",
         ),
         (
-            '{"schema_version":2,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[],"closed_positions":[123]}\n',
+            _snapshot_payload_v2(closed_positions=[123]),
             "closed_positions",
         ),
         (
-            '{"schema_version":true,"as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[],"closed_positions":[]}\n',
+            _snapshot_payload_v2(schema_version=True),
             "schema_version",
         ),
         (
-            '{"schema_version":"2","as_of_date":"2026-05-02","source_id":"x","account":{"balance_pln":"1","equity_pln":"2","export_datetime":"2026-05-02T10:00:00+02:00"},"positions":[],"closed_positions":[]}\n',
+            _snapshot_payload_v2(schema_version="2"),
             "schema_version",
+        ),
+        (
+            _snapshot_payload_v2(account=_account_payload(balance_pln={})),
+            "balance_pln",
+        ),
+        (
+            _snapshot_payload_v2(positions=[_position_payload(id="bad")]),
+            "id",
+        ),
+        (
+            _snapshot_payload_v2(positions=[_position_payload(volume="not-a-decimal")]),
+            "volume",
+        ),
+        (
+            _snapshot_payload_v2(as_of_date="not-a-date"),
+            "as_of_date",
+        ),
+        (
+            _snapshot_payload_v2(account=_account_payload(export_datetime="not-a-datetime")),
+            "export_datetime",
+        ),
+        (
+            _snapshot_payload_v2(positions=[_position_payload(type="NOPE")]),
+            "type",
         ),
     ),
 )
-def test_malformed_snapshot_payload_raises_snapshot_not_found(
+def test_malformed_snapshot_payload_raises_snapshot_malformed(
     tmp_path: Path,
-    payload: str,
+    payload: JSONPayload,
     error_match: str,
 ) -> None:
     store = _store(tmp_path)
     path = _snapshot_path(tmp_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(payload, encoding="utf-8")
+    _write_snapshot_payload(path, payload)
 
-    with pytest.raises(SnapshotNotFoundError, match=error_match):
-        store.load(date(2026, 5, 2))
+    with pytest.raises(SnapshotMalformedError, match=error_match):
+        store.load(DEFAULT_AS_OF_DATE)

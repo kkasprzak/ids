@@ -13,6 +13,10 @@ class SnapshotNotFoundError(SnapshotStoreError):
     """No snapshot exists for the requested date."""
 
 
+class SnapshotMalformedError(SnapshotStoreError):
+    """A snapshot source exists but cannot be parsed into a valid snapshot."""
+
+
 class SnapshotStore(Protocol):
     """Persists and retrieves PortfolioSnapshot history.
 
