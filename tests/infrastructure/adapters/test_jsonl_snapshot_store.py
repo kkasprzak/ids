@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ids.application.ports import SnapshotMalformedError, SnapshotNotFoundError
+from ids.application.ports import SnapshotMalformedError, SnapshotNotFoundError, SnapshotStoreError
 from ids.domain.models import ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.timezones import WARSAW
 from ids.infrastructure.adapters.jsonl_snapshot_store import JSONLSnapshotStore
@@ -295,6 +295,62 @@ def test_load_missing_raises_snapshot_not_found(tmp_path: Path) -> None:
         store.load(DEFAULT_AS_OF_DATE)
 
 
+def test_save_wraps_filesystem_errors_in_snapshot_store_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_snapshot: Callable[..., PortfolioSnapshot]
+) -> None:
+    store = _store(tmp_path)
+    snapshot = make_snapshot()
+    original_write_text = Path.write_text
+
+    def fail_write_text(self: Path, *args: object, **kwargs: object) -> int:
+        if self == _snapshot_path(tmp_path):
+            raise PermissionError("blocked")
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", fail_write_text)
+
+    with pytest.raises(SnapshotStoreError, match="Failed to save snapshot"):
+        store.save(snapshot)
+
+
+def test_load_wraps_filesystem_errors_in_snapshot_store_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_snapshot: Callable[..., PortfolioSnapshot]
+) -> None:
+    store = _store(tmp_path)
+    snapshot = make_snapshot()
+    store.save(snapshot)
+    original_open = Path.open
+
+    def fail_open(self: Path, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        if self == _snapshot_path(tmp_path):
+            raise PermissionError("blocked")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", fail_open)
+
+    with pytest.raises(SnapshotStoreError, match="Failed to load snapshot"):
+        store.load(snapshot.as_of_date)
+
+
+def test_list_all_wraps_filesystem_errors_in_snapshot_store_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path)
+    root = tmp_path / "outputs" / "snapshots"
+    root.mkdir(parents=True, exist_ok=True)
+    original_is_dir = Path.is_dir
+
+    def fail_is_dir(self: Path) -> bool:
+        if self == root:
+            raise PermissionError("blocked")
+        return original_is_dir(self)
+
+    monkeypatch.setattr(Path, "is_dir", fail_is_dir)
+
+    with pytest.raises(SnapshotStoreError, match="Failed to list snapshots"):
+        store.list_all()
+
+
 def test_list_all_orders_by_as_of_ascending(
     tmp_path: Path,
     make_snapshot: Callable[..., PortfolioSnapshot],
@@ -350,6 +406,32 @@ def test_load_schema_v1_maps_missing_closed_positions_to_empty(tmp_path: Path) -
 
     assert loaded.schema_version == 1
     assert loaded.closed_positions == ()
+
+
+def test_load_rejects_domain_invalid_payload_as_snapshot_malformed(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    path = _snapshot_path(tmp_path)
+    _write_snapshot_payload(
+        path,
+        _snapshot_payload_v2(positions=[_position_payload(open_price="0")]),
+    )
+
+    with pytest.raises(SnapshotMalformedError, match="open_price"):
+        store.load(DEFAULT_AS_OF_DATE)
+
+
+def test_load_rejects_naive_datetimes_as_snapshot_malformed(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    path = _snapshot_path(tmp_path)
+    _write_snapshot_payload(
+        path,
+        _snapshot_payload_v2(
+            account=_account_payload(export_datetime="2026-05-02T10:00:00"),
+        ),
+    )
+
+    with pytest.raises(SnapshotMalformedError, match="timezone-aware"):
+        store.load(DEFAULT_AS_OF_DATE)
 
 
 def test_save_upgrades_loaded_v1_snapshot_to_v2(tmp_path: Path) -> None:

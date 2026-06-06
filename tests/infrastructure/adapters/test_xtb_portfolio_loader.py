@@ -169,6 +169,50 @@ def test_latest_export_selection_by_as_of_date(tmp_path: Path) -> None:
     assert snapshot.positions[0].symbol == "NEWER"
 
 
+def test_directory_access_errors_raise_no_portfolio_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir = tmp_path / "inputs"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    original_is_dir = Path.is_dir
+
+    def fail_is_dir(self: Path) -> bool:
+        if self == input_dir:
+            raise PermissionError("blocked")
+        return original_is_dir(self)
+
+    monkeypatch.setattr(Path, "is_dir", fail_is_dir)
+
+    with pytest.raises(NoPortfolioAvailableError, match="Could not access directory"):
+        _loader(input_dir).load_latest()
+
+
+def test_fallback_stat_errors_raise_malformed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir = tmp_path / "inputs"
+    path = input_dir / "renamed.xlsx"
+    make_xlsx(
+        path,
+        balance=Decimal("1"),
+        equity=Decimal("2"),
+        export_dt=datetime(2026, 5, 3, 10, 30),
+        positions=[{"Symbol": "NEWER"}],
+        closed_positions=[],
+    )
+    original_stat = Path.stat
+
+    def fail_stat(self: Path):  # type: ignore[no-untyped-def]
+        if self == path:
+            raise PermissionError("blocked")
+        return original_stat(self)
+
+    monkeypatch.setattr(Path, "stat", fail_stat)
+
+    with pytest.raises(PortfolioMalformedError, match="Failed to inspect XLSX file"):
+        _loader(input_dir).load_latest()
+
+
 def test_non_ikze_file_silently_ignored(tmp_path: Path) -> None:
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, positions=[{"Symbol": "IKZE"}])

@@ -9,6 +9,7 @@ from ids.application.ports.snapshot_store import (
     SnapshotMalformedError,
     SnapshotNotFoundError,
     SnapshotStore,
+    SnapshotStoreError,
 )
 from ids.domain.enums import PositionType
 from ids.domain.models import AccountSummary, ClosedPosition, PortfolioSnapshot, Position
@@ -20,24 +21,43 @@ class JSONLSnapshotStore(SnapshotStore):
         self._root = root
 
     def save(self, snapshot: PortfolioSnapshot) -> None:
-        self._root.mkdir(parents=True, exist_ok=True)
         path = self._path_for(snapshot.as_of_date)
-        line = _snapshot_to_dto(snapshot).model_dump_json()
-        path.write_text(f"{line}\n", encoding="utf-8")
+        try:
+            self._root.mkdir(parents=True, exist_ok=True)
+            line = _snapshot_to_dto(snapshot).model_dump_json()
+            path.write_text(f"{line}\n", encoding="utf-8")
+        except SnapshotMalformedError:
+            raise
+        except (ValidationError, TypeError, ValueError) as exc:
+            raise SnapshotMalformedError(f"Malformed snapshot payload: {exc}") from exc
+        except OSError as exc:
+            raise SnapshotStoreError(f"Failed to save snapshot to `{path}`: {exc}") from exc
 
     def load(self, as_of_date: date) -> PortfolioSnapshot:
         path = self._path_for(as_of_date)
-        if not path.is_file():
-            raise SnapshotNotFoundError(
-                f"No snapshot for {as_of_date.isoformat()} in {self._root}/",
-            )
-        return self._load_file(path)
+        try:
+            if not path.is_file():
+                raise SnapshotNotFoundError(
+                    f"No snapshot for {as_of_date.isoformat()} in {self._root}/",
+                )
+            return self._load_file(path)
+        except SnapshotNotFoundError:
+            raise
+        except SnapshotMalformedError:
+            raise
+        except OSError as exc:
+            raise SnapshotStoreError(f"Failed to load snapshot from `{path}`: {exc}") from exc
 
     def list_all(self) -> tuple[PortfolioSnapshot, ...]:
-        if not self._root.is_dir():
-            return ()
-        files = sorted(self._root.glob("*.jsonl"))
-        return tuple(self._load_file(path) for path in files)
+        try:
+            if not self._root.is_dir():
+                return ()
+            files = sorted(self._root.glob("*.jsonl"))
+            return tuple(self._load_file(path) for path in files)
+        except SnapshotMalformedError:
+            raise
+        except OSError as exc:
+            raise SnapshotStoreError(f"Failed to list snapshots in `{self._root}`: {exc}") from exc
 
     def _path_for(self, as_of_date: date) -> Path:
         return self._root / f"{as_of_date.isoformat()}.jsonl"
@@ -107,20 +127,23 @@ _SNAPSHOT_DTO_ADAPTER: TypeAdapter[_SnapshotDTO] = TypeAdapter(_SnapshotDTO)
 
 
 def _snapshot_to_dto(snapshot: PortfolioSnapshot) -> _SnapshotV2DTO:
-    return _SnapshotV2DTO(
-        schema_version=2,
-        as_of_date=snapshot.as_of_date,
-        source_id=snapshot.source_id,
-        account=_AccountDTO(
-            balance_pln=snapshot.account.balance_pln,
-            equity_pln=snapshot.account.equity_pln,
-            export_datetime=_to_utc(snapshot.account.export_datetime),
-        ),
-        positions=[_position_to_dto(position) for position in snapshot.positions],
-        closed_positions=[
-            _closed_position_to_dto(position) for position in snapshot.closed_positions
-        ],
-    )
+    try:
+        return _SnapshotV2DTO(
+            schema_version=2,
+            as_of_date=snapshot.as_of_date,
+            source_id=snapshot.source_id,
+            account=_AccountDTO(
+                balance_pln=snapshot.account.balance_pln,
+                equity_pln=snapshot.account.equity_pln,
+                export_datetime=_to_utc(snapshot.account.export_datetime),
+            ),
+            positions=[_position_to_dto(position) for position in snapshot.positions],
+            closed_positions=[
+                _closed_position_to_dto(position) for position in snapshot.closed_positions
+            ],
+        )
+    except ValidationError as exc:
+        raise SnapshotMalformedError(f"Malformed snapshot payload: {exc}") from exc
 
 
 def _position_to_dto(position: Position) -> _PositionDTO:
@@ -161,23 +184,26 @@ def _parse_snapshot_dto(payload: str) -> _SnapshotDTO:
 
 
 def _dto_to_snapshot(dto: _SnapshotDTO) -> PortfolioSnapshot:
-    closed_positions = (
-        ()
-        if isinstance(dto, _SnapshotV1DTO)
-        else tuple(_dto_to_closed_position(position) for position in dto.closed_positions)
-    )
-    return PortfolioSnapshot(
-        as_of_date=dto.as_of_date,
-        source_id=dto.source_id,
-        account=AccountSummary(
-            balance_pln=dto.account.balance_pln,
-            equity_pln=dto.account.equity_pln,
-            export_datetime=_to_warsaw(dto.account.export_datetime),
-        ),
-        positions=tuple(_dto_to_position(position) for position in dto.positions),
-        closed_positions=closed_positions,
-        schema_version=dto.schema_version,
-    )
+    try:
+        closed_positions = (
+            ()
+            if isinstance(dto, _SnapshotV1DTO)
+            else tuple(_dto_to_closed_position(position) for position in dto.closed_positions)
+        )
+        return PortfolioSnapshot(
+            as_of_date=dto.as_of_date,
+            source_id=dto.source_id,
+            account=AccountSummary(
+                balance_pln=dto.account.balance_pln,
+                equity_pln=dto.account.equity_pln,
+                export_datetime=_to_warsaw(dto.account.export_datetime),
+            ),
+            positions=tuple(_dto_to_position(position) for position in dto.positions),
+            closed_positions=closed_positions,
+            schema_version=dto.schema_version,
+        )
+    except (TypeError, ValueError) as exc:
+        raise SnapshotMalformedError(f"Malformed snapshot payload: {exc}") from exc
 
 
 def _dto_to_position(dto: _PositionDTO) -> Position:
@@ -211,6 +237,8 @@ def _dto_to_closed_position(dto: _ClosedPositionDTO) -> ClosedPosition:
 
 
 def _to_warsaw(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        raise SnapshotMalformedError("Snapshot datetime values must be timezone-aware")
     return value.astimezone(WARSAW)
 
 

@@ -99,7 +99,7 @@ class XTBPortfolioLoader(PortfolioLoader):
         if not fallback_candidates:
             self._raise_no_available_export(xlsx_files, excluded_other_accounts)
 
-        latest_file = max(fallback_candidates, key=lambda path: path.stat().st_mtime)
+        latest_file = max(fallback_candidates, key=self._mtime_for_path)
         as_of_date = self._as_of_date_from_export_datetime(latest_file)
         log.info(
             "No strict IKZE filename matches; selected latest XLSX by mtime: %s "
@@ -110,14 +110,21 @@ class XTBPortfolioLoader(PortfolioLoader):
         return latest_file, as_of_date
 
     def _list_xlsx_files(self) -> list[Path]:
-        if not self._input_dir.is_dir():
+        try:
+            if not self._input_dir.is_dir():
+                raise NoPortfolioAvailableError(
+                    f"Directory `{self._input_dir}/` not found.\n"
+                    f"  Create it and place an XTB XLSX export there:\n"
+                    f"    mkdir -p {self._input_dir}/\n"
+                    f"    cp ~/Downloads/account_ikze_{self._account_id}_*.xlsx {self._input_dir}/"
+                )
+            return sorted(self._input_dir.glob("*.xlsx"))
+        except NoPortfolioAvailableError:
+            raise
+        except OSError as exc:
             raise NoPortfolioAvailableError(
-                f"Directory `{self._input_dir}/` not found.\n"
-                f"  Create it and place an XTB XLSX export there:\n"
-                f"    mkdir -p {self._input_dir}/\n"
-                f"    cp ~/Downloads/account_ikze_{self._account_id}_*.xlsx {self._input_dir}/"
-            )
-        return sorted(self._input_dir.glob("*.xlsx"))
+                f"Could not access directory `{self._input_dir}/`: {exc}"
+            ) from exc
 
     def _latest_strict_filename_match(self, xlsx_files: list[Path]) -> tuple[Path, date] | None:
         candidates = [
@@ -158,6 +165,14 @@ class XTBPortfolioLoader(PortfolioLoader):
             f"  Found: {found if found else '(empty)'}\n"
             f"  Excluded as other account IDs: {excluded}"
         )
+
+    def _mtime_for_path(self, path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except OSError as exc:
+            raise PortfolioMalformedError(
+                f"Failed to inspect XLSX file `{path.name}`: {exc}"
+            ) from exc
 
     def _as_of_date_for_path(self, path: Path) -> date:
         as_of = parse_xtb_filename(path.name, expected_account_id=self._account_id)

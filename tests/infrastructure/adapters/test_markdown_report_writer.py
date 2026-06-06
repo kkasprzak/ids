@@ -3,7 +3,9 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from jinja2 import TemplateNotFound
 
+from ids.application.ports import ReportWriterError
 from ids.application.viewmodels import AlertView, PositionRow, WeeklySnapshotView
 from ids.domain.enums import AlertKind, AlertSeverity
 from ids.domain.timezones import WARSAW
@@ -171,6 +173,39 @@ def test_creates_parent_dir_if_missing(tmp_path: Path) -> None:
 
     assert output.parent.is_dir()
     assert output.is_file()
+
+
+def test_wraps_template_lookup_errors_in_report_writer_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer = MarkdownReportWriter()
+    output = tmp_path / "weekly.md"
+
+    def fail_get_template(name: str) -> object:
+        raise TemplateNotFound(name)
+
+    monkeypatch.setattr(writer._env, "get_template", fail_get_template)
+
+    with pytest.raises(ReportWriterError, match="Failed to render weekly report"):
+        writer.write_weekly(_view_with_rows(), str(output))
+
+
+def test_wraps_filesystem_write_errors_in_report_writer_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer = MarkdownReportWriter()
+    output = tmp_path / "nested" / "weekly.md"
+    original_write_text = Path.write_text
+
+    def fail_write_text(self: Path, *args: object, **kwargs: object) -> int:
+        if self == output:
+            raise PermissionError("blocked")
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", fail_write_text)
+
+    with pytest.raises(ReportWriterError, match="Failed to write weekly report"):
+        writer.write_weekly(_view_with_rows(), str(output))
 
 
 def test_renders_source_id_verbatim(tmp_path: Path) -> None:

@@ -3,9 +3,9 @@ from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
-from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
+from jinja2 import Environment, PackageLoader, StrictUndefined, TemplateError, select_autoescape
 
-from ids.application.ports.report_writer import ReportWriter
+from ids.application.ports.report_writer import ReportWriter, ReportWriterError
 from ids.application.viewmodels import WeeklySnapshotView
 from ids.infrastructure.adapters.formatters import (
     format_pct_signed,
@@ -39,8 +39,13 @@ class MarkdownReportWriter(ReportWriter):
         filters["price"] = format_price
 
     def write_weekly(self, view: WeeklySnapshotView, output_path: str) -> None:
-        template = self._env.get_template("weekly_report.md.j2")
-        rendered = template.render(view=view)
         path = Path(output_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(rendered, encoding="utf-8")
+        try:
+            template = self._env.get_template("weekly_report.md.j2")
+            rendered = template.render(view=view)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(rendered, encoding="utf-8")
+        except TemplateError as exc:
+            raise ReportWriterError(f"Failed to render weekly report: {exc}") from exc
+        except OSError as exc:
+            raise ReportWriterError(f"Failed to write weekly report to `{path}`: {exc}") from exc
