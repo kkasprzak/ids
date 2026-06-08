@@ -305,7 +305,7 @@ def test_save_wraps_filesystem_errors_in_snapshot_store_error(
     def fail_write_text(self: Path, *args: object, **kwargs: object) -> int:
         if self == _snapshot_path(tmp_path):
             raise PermissionError("blocked")
-        return original_write_text(self, *args, **kwargs)
+        return original_write_text(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
 
     monkeypatch.setattr(Path, "write_text", fail_write_text)
 
@@ -324,7 +324,7 @@ def test_load_wraps_filesystem_errors_in_snapshot_store_error(
     def fail_open(self: Path, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
         if self == _snapshot_path(tmp_path):
             raise PermissionError("blocked")
-        return original_open(self, *args, **kwargs)
+        return original_open(self, *args, **kwargs)  # pyright: ignore[reportCallIssue,reportArgumentType]
 
     monkeypatch.setattr(Path, "open", fail_open)
 

@@ -200,7 +200,7 @@ def test_wraps_filesystem_write_errors_in_report_writer_error(
     def fail_write_text(self: Path, *args: object, **kwargs: object) -> int:
         if self == output:
             raise PermissionError("blocked")
-        return original_write_text(self, *args, **kwargs)
+        return original_write_text(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
 
     monkeypatch.setattr(Path, "write_text", fail_write_text)
 
