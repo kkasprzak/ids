@@ -726,9 +726,7 @@ def test_malformed_closed_position_row_raises_error(tmp_path: Path) -> None:
         closed_positions=[{"Close price": "NOT_A_NUMBER"}],
     )
 
-    with pytest.raises(
-        PortfolioMalformedError, match=r"closed-position row 12, field `close_price`"
-    ):
+    with pytest.raises(PortfolioMalformedError, match=r"row 12, field `close_price`"):
         _loader(input_dir).load_latest()
 
 
@@ -855,7 +853,7 @@ def test_closed_position_with_zero_open_price_raises_with_row_context(tmp_path: 
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, closed_positions=[{"Open price": Decimal("0")}])
 
-    with pytest.raises(PortfolioMalformedError, match=r"closed-position row 12.*open_price"):
+    with pytest.raises(PortfolioMalformedError, match=r"row 12.*open_price"):
         _loader(input_dir).load_latest()
 
 
@@ -863,7 +861,7 @@ def test_closed_position_with_zero_close_price_raises_with_row_context(tmp_path:
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, closed_positions=[{"Close price": Decimal("0")}])
 
-    with pytest.raises(PortfolioMalformedError, match=r"closed-position row 12.*close_price"):
+    with pytest.raises(PortfolioMalformedError, match=r"row 12.*close_price"):
         _loader(input_dir).load_latest()
 
 
@@ -871,7 +869,7 @@ def test_position_with_zero_open_price_raises_with_row_context(tmp_path: Path) -
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, positions=[{"Open price": Decimal("0")}])
 
-    with pytest.raises(PortfolioMalformedError, match=r"open-position row 8.*open_price"):
+    with pytest.raises(PortfolioMalformedError, match=r"row 8.*open_price"):
         _loader(input_dir).load_latest()
 
 
@@ -879,7 +877,7 @@ def test_position_with_zero_market_price_raises_with_row_context(tmp_path: Path)
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, positions=[{"Market price": Decimal("0")}])
 
-    with pytest.raises(PortfolioMalformedError, match=r"open-position row 8.*market_price"):
+    with pytest.raises(PortfolioMalformedError, match=r"row 8.*market_price"):
         _loader(input_dir).load_latest()
 
 

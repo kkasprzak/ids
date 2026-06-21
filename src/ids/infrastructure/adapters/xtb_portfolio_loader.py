@@ -292,9 +292,9 @@ class XTBPortfolioLoader(PortfolioLoader):
         try:
             open_price = _cell_to_decimal(open_price_raw)
         except Exception as exc:
-            raise _position_row_error(row_idx, "open_price", open_price_raw, exc) from exc
+            raise _row_error(row_idx, "open_price", open_price_raw, exc) from exc
         if open_price <= 0:
-            raise _position_row_error(
+            raise _row_error(
                 row_idx,
                 "open_price",
                 open_price_raw,
@@ -303,9 +303,9 @@ class XTBPortfolioLoader(PortfolioLoader):
         try:
             market_price = _cell_to_decimal(market_price_raw)
         except Exception as exc:
-            raise _position_row_error(row_idx, "market_price", market_price_raw, exc) from exc
+            raise _row_error(row_idx, "market_price", market_price_raw, exc) from exc
         if market_price <= 0:
-            raise _position_row_error(
+            raise _row_error(
                 row_idx,
                 "market_price",
                 market_price_raw,
@@ -409,9 +409,9 @@ class XTBPortfolioLoader(PortfolioLoader):
         try:
             open_price = _cell_to_decimal(open_price_raw)
         except Exception as exc:
-            raise _closed_position_row_error(row_idx, "open_price", open_price_raw, exc) from exc
+            raise _row_error(row_idx, "open_price", open_price_raw, exc) from exc
         if open_price <= 0:
-            raise _closed_position_row_error(
+            raise _row_error(
                 row_idx,
                 "open_price",
                 open_price_raw,
@@ -420,9 +420,9 @@ class XTBPortfolioLoader(PortfolioLoader):
         try:
             close_price = _cell_to_decimal(close_price_raw)
         except Exception as exc:
-            raise _closed_position_row_error(row_idx, "close_price", close_price_raw, exc) from exc
+            raise _row_error(row_idx, "close_price", close_price_raw, exc) from exc
         if close_price <= 0:
-            raise _closed_position_row_error(
+            raise _row_error(
                 row_idx,
                 "close_price",
                 close_price_raw,
@@ -568,77 +568,77 @@ def _position_symbol(row_idx: int, value: RawCellValue) -> Symbol:
     try:
         return _cell_to_symbol(value)
     except Exception as exc:
-        raise _position_row_error(row_idx, "symbol", value, exc) from exc
+        raise _row_error(row_idx, "symbol", value, exc) from exc
 
 
 def _closed_position_symbol(row_idx: int, value: RawCellValue) -> Symbol:
     try:
         return _cell_to_symbol(value)
     except Exception as exc:
-        raise _closed_position_row_error(row_idx, "symbol", value, exc) from exc
+        raise _row_error(row_idx, "symbol", value, exc) from exc
 
 
 def _position_type(row_idx: int, value: RawCellValue) -> PositionType:
     try:
         return PositionType(value)
     except Exception as exc:
-        raise _position_row_error(row_idx, "type", value, exc) from exc
+        raise _row_error(row_idx, "type", value, exc) from exc
 
 
 def _closed_position_type(row_idx: int, value: RawCellValue) -> PositionType:
     try:
         return PositionType(value)
     except Exception as exc:
-        raise _closed_position_row_error(row_idx, "type", value, exc) from exc
+        raise _row_error(row_idx, "type", value, exc) from exc
 
 
 def _position_decimal(row_idx: int, field_name: str, value: RawCellValue) -> Decimal:
     try:
         return _cell_to_decimal(value)
     except Exception as exc:
-        raise _position_row_error(row_idx, field_name, value, exc) from exc
+        raise _row_error(row_idx, field_name, value, exc) from exc
 
 
 def _closed_position_decimal(row_idx: int, field_name: str, value: RawCellValue) -> Decimal:
     try:
         return _cell_to_decimal(value)
     except Exception as exc:
-        raise _closed_position_row_error(row_idx, field_name, value, exc) from exc
+        raise _row_error(row_idx, field_name, value, exc) from exc
 
 
 def _position_datetime(row_idx: int, field_name: str, value: RawCellValue) -> datetime:
     try:
         return _naive_dt_to_warsaw(value)
     except Exception as exc:
-        raise _position_row_error(row_idx, field_name, value, exc) from exc
+        raise _row_error(row_idx, field_name, value, exc) from exc
 
 
 def _closed_position_datetime(row_idx: int, field_name: str, value: RawCellValue) -> datetime:
     try:
         return _naive_dt_to_warsaw(value)
     except Exception as exc:
-        raise _closed_position_row_error(row_idx, field_name, value, exc) from exc
+        raise _row_error(row_idx, field_name, value, exc) from exc
 
 
 def _position_id(row_idx: int, value: RawCellValue) -> int:
     try:
         return _cell_to_int(value)
     except Exception as exc:
-        raise _position_row_error(row_idx, "position_id", value, exc) from exc
+        raise _row_error(row_idx, "position_id", value, exc) from exc
 
 
 def _closed_position_id(row_idx: int, value: RawCellValue) -> int:
     try:
         return _cell_to_int(value)
     except Exception as exc:
-        raise _closed_position_row_error(row_idx, "position_id", value, exc) from exc
+        raise _row_error(row_idx, "position_id", value, exc) from exc
 
 
 def _position_stop_loss(row_idx: int, value: RawCellValue) -> Decimal | None:
     try:
         return _normalize_stop_loss(value)
     except Exception as exc:
-        raise _position_row_error(row_idx, "sl", value, exc) from exc
+        raise _row_error(row_idx, "sl", value, exc) from exc
 
 
 def _cell_to_int(value: RawCellValue) -> int:
@@ -665,20 +665,11 @@ def _find_export_datetime(sheet: Worksheet) -> datetime:
     )
 
 
-def _position_row_error(
+def _row_error(
     row_idx: int, field_name: str, value: RawCellValue, exc: Exception
 ) -> PortfolioMalformedError:
     return PortfolioMalformedError(
-        f"Malformed open-position row {row_idx}, field `{field_name}` "
-        f"(value={value!r}, type={type(value).__name__}): {exc}"
-    )
-
-
-def _closed_position_row_error(
-    row_idx: int, field_name: str, value: RawCellValue, exc: Exception
-) -> PortfolioMalformedError:
-    return PortfolioMalformedError(
-        f"Malformed closed-position row {row_idx}, field `{field_name}` "
+        f"Malformed row {row_idx}, field `{field_name}` "
         f"(value={value!r}, type={type(value).__name__}): {exc}"
     )
 
