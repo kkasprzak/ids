@@ -194,10 +194,16 @@ def test_wraps_filesystem_write_errors_in_position_log_store_error(
     store = _store(tmp_path)
     original_write_text = Path.write_text
 
-    def fail_write_text(self: Path, *args: object, **kwargs: object) -> int:
+    def fail_write_text(
+        self: Path,
+        data: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> int:
         if self.name == "2026-01-01_AAA.PL.md":
             raise PermissionError("blocked")
-        return original_write_text(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
+        return original_write_text(self, data, encoding=encoding, errors=errors, newline=newline)
 
     monkeypatch.setattr(Path, "write_text", fail_write_text)
 
