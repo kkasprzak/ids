@@ -286,28 +286,9 @@ class XTBPortfolioLoader(PortfolioLoader):
         return positions
 
     def _row_to_position(self, row: RawDataRow, columns: ColumnIndexes, row_idx: int) -> Position:
-        position_id_raw = self._row_cell(row, columns, row_idx, "position_id")
-        type_raw = self._row_cell(row, columns, row_idx, "type")
-        volume_raw = self._row_cell(row, columns, row_idx, "volume")
-        open_time_raw = self._row_cell(row, columns, row_idx, "open_time")
         open_price_raw = self._row_cell(row, columns, row_idx, "open_price")
         market_price_raw = self._row_cell(row, columns, row_idx, "market_price")
-        purchase_value_raw = self._row_cell(row, columns, row_idx, "purchase_value")
-        gross_pl_raw = self._row_cell(row, columns, row_idx, "gross_pl")
-        sl_raw = self._row_cell(row, columns, row_idx, "sl")
 
-        try:
-            position_type = PositionType(type_raw)
-        except Exception as exc:
-            raise _position_row_error(row_idx, "type", type_raw, exc) from exc
-        try:
-            volume = _cell_to_decimal(volume_raw)
-        except Exception as exc:
-            raise _position_row_error(row_idx, "volume", volume_raw, exc) from exc
-        try:
-            open_time = _naive_dt_to_warsaw(open_time_raw)
-        except Exception as exc:
-            raise _position_row_error(row_idx, "open_time", open_time_raw, exc) from exc
         try:
             open_price = _cell_to_decimal(open_price_raw)
         except Exception as exc:
@@ -330,36 +311,27 @@ class XTBPortfolioLoader(PortfolioLoader):
                 market_price_raw,
                 ValueError(f"market_price must be positive (got {market_price})"),
             )
-        try:
-            purchase_value = _cell_to_decimal(purchase_value_raw)
-        except Exception as exc:
-            raise _position_row_error(row_idx, "purchase_value", purchase_value_raw, exc) from exc
-        try:
-            gross_pl = _cell_to_decimal(gross_pl_raw)
-        except Exception as exc:
-            raise _position_row_error(row_idx, "gross_pl", gross_pl_raw, exc) from exc
-
-        try:
-            sl = _normalize_stop_loss(sl_raw)
-        except Exception as exc:
-            raise _position_row_error(row_idx, "sl", sl_raw, exc) from exc
-
-        try:
-            position_id = _cell_to_int(position_id_raw)
-        except Exception as exc:
-            raise _position_row_error(row_idx, "position_id", position_id_raw, exc) from exc
-
         return Position(
-            id=position_id,
+            id=_position_id(row_idx, self._row_cell(row, columns, row_idx, "position_id")),
             symbol=_position_symbol(row_idx, self._row_cell(row, columns, row_idx, "symbol")),
-            type=position_type,
-            volume=volume,
-            open_time=open_time,
+            type=_position_type(row_idx, self._row_cell(row, columns, row_idx, "type")),
+            volume=_position_decimal(
+                row_idx, "volume", self._row_cell(row, columns, row_idx, "volume")
+            ),
+            open_time=_position_datetime(
+                row_idx, "open_time", self._row_cell(row, columns, row_idx, "open_time")
+            ),
             open_price=open_price,
             market_price=market_price,
-            purchase_value_pln=purchase_value,
-            gross_pl_pln=gross_pl,
-            sl=sl,
+            purchase_value_pln=_position_decimal(
+                row_idx,
+                "purchase_value",
+                self._row_cell(row, columns, row_idx, "purchase_value"),
+            ),
+            gross_pl_pln=_position_decimal(
+                row_idx, "gross_pl", self._row_cell(row, columns, row_idx, "gross_pl")
+            ),
+            sl=_position_stop_loss(row_idx, self._row_cell(row, columns, row_idx, "sl")),
         )
 
     def _row_cell(
@@ -431,28 +403,9 @@ class XTBPortfolioLoader(PortfolioLoader):
     def _row_to_closed_position(
         self, row: RawDataRow, columns: ColumnIndexes, row_idx: int
     ) -> ClosedPosition:
-        position_id_raw = self._closed_row_cell(row, columns, row_idx, "position_id")
-        type_raw = self._closed_row_cell(row, columns, row_idx, "type")
-        volume_raw = self._closed_row_cell(row, columns, row_idx, "volume")
-        open_time_raw = self._closed_row_cell(row, columns, row_idx, "open_time")
         open_price_raw = self._closed_row_cell(row, columns, row_idx, "open_price")
-        close_time_raw = self._closed_row_cell(row, columns, row_idx, "close_time")
         close_price_raw = self._closed_row_cell(row, columns, row_idx, "close_price")
-        purchase_value_raw = self._closed_row_cell(row, columns, row_idx, "purchase_value")
-        gross_pl_raw = self._closed_row_cell(row, columns, row_idx, "gross_pl")
 
-        try:
-            position_type = PositionType(type_raw)
-        except Exception as exc:
-            raise _closed_position_row_error(row_idx, "type", type_raw, exc) from exc
-        try:
-            volume = _cell_to_decimal(volume_raw)
-        except Exception as exc:
-            raise _closed_position_row_error(row_idx, "volume", volume_raw, exc) from exc
-        try:
-            open_time = _naive_dt_to_warsaw(open_time_raw)
-        except Exception as exc:
-            raise _closed_position_row_error(row_idx, "open_time", open_time_raw, exc) from exc
         try:
             open_price = _cell_to_decimal(open_price_raw)
         except Exception as exc:
@@ -465,10 +418,6 @@ class XTBPortfolioLoader(PortfolioLoader):
                 ValueError(f"open_price must be positive (got {open_price})"),
             )
         try:
-            close_time = _naive_dt_to_warsaw(close_time_raw)
-        except Exception as exc:
-            raise _closed_position_row_error(row_idx, "close_time", close_time_raw, exc) from exc
-        try:
             close_price = _cell_to_decimal(close_price_raw)
         except Exception as exc:
             raise _closed_position_row_error(row_idx, "close_price", close_price_raw, exc) from exc
@@ -479,34 +428,35 @@ class XTBPortfolioLoader(PortfolioLoader):
                 close_price_raw,
                 ValueError(f"close_price must be positive (got {close_price})"),
             )
-        try:
-            purchase_value = _cell_to_decimal(purchase_value_raw)
-        except Exception as exc:
-            raise _closed_position_row_error(
-                row_idx, "purchase_value", purchase_value_raw, exc
-            ) from exc
-        try:
-            gross_pl = _cell_to_decimal(gross_pl_raw)
-        except Exception as exc:
-            raise _closed_position_row_error(row_idx, "gross_pl", gross_pl_raw, exc) from exc
-        try:
-            position_id = _cell_to_int(position_id_raw)
-        except Exception as exc:
-            raise _closed_position_row_error(row_idx, "position_id", position_id_raw, exc) from exc
-
         return ClosedPosition(
-            id=position_id,
+            id=_closed_position_id(
+                row_idx, self._closed_row_cell(row, columns, row_idx, "position_id")
+            ),
             symbol=_closed_position_symbol(
                 row_idx, self._closed_row_cell(row, columns, row_idx, "symbol")
             ),
-            type=position_type,
-            volume=volume,
-            open_time=open_time,
-            close_time=close_time,
+            type=_closed_position_type(
+                row_idx, self._closed_row_cell(row, columns, row_idx, "type")
+            ),
+            volume=_closed_position_decimal(
+                row_idx, "volume", self._closed_row_cell(row, columns, row_idx, "volume")
+            ),
+            open_time=_closed_position_datetime(
+                row_idx, "open_time", self._closed_row_cell(row, columns, row_idx, "open_time")
+            ),
+            close_time=_closed_position_datetime(
+                row_idx, "close_time", self._closed_row_cell(row, columns, row_idx, "close_time")
+            ),
             open_price=open_price,
             close_price=close_price,
-            purchase_value_pln=purchase_value,
-            gross_pl_pln=gross_pl,
+            purchase_value_pln=_closed_position_decimal(
+                row_idx,
+                "purchase_value",
+                self._closed_row_cell(row, columns, row_idx, "purchase_value"),
+            ),
+            gross_pl_pln=_closed_position_decimal(
+                row_idx, "gross_pl", self._closed_row_cell(row, columns, row_idx, "gross_pl")
+            ),
         )
 
     def _closed_row_cell(
@@ -626,6 +576,69 @@ def _closed_position_symbol(row_idx: int, value: RawCellValue) -> Symbol:
         return _cell_to_symbol(value)
     except Exception as exc:
         raise _closed_position_row_error(row_idx, "symbol", value, exc) from exc
+
+
+def _position_type(row_idx: int, value: RawCellValue) -> PositionType:
+    try:
+        return PositionType(value)
+    except Exception as exc:
+        raise _position_row_error(row_idx, "type", value, exc) from exc
+
+
+def _closed_position_type(row_idx: int, value: RawCellValue) -> PositionType:
+    try:
+        return PositionType(value)
+    except Exception as exc:
+        raise _closed_position_row_error(row_idx, "type", value, exc) from exc
+
+
+def _position_decimal(row_idx: int, field_name: str, value: RawCellValue) -> Decimal:
+    try:
+        return _cell_to_decimal(value)
+    except Exception as exc:
+        raise _position_row_error(row_idx, field_name, value, exc) from exc
+
+
+def _closed_position_decimal(row_idx: int, field_name: str, value: RawCellValue) -> Decimal:
+    try:
+        return _cell_to_decimal(value)
+    except Exception as exc:
+        raise _closed_position_row_error(row_idx, field_name, value, exc) from exc
+
+
+def _position_datetime(row_idx: int, field_name: str, value: RawCellValue) -> datetime:
+    try:
+        return _naive_dt_to_warsaw(value)
+    except Exception as exc:
+        raise _position_row_error(row_idx, field_name, value, exc) from exc
+
+
+def _closed_position_datetime(row_idx: int, field_name: str, value: RawCellValue) -> datetime:
+    try:
+        return _naive_dt_to_warsaw(value)
+    except Exception as exc:
+        raise _closed_position_row_error(row_idx, field_name, value, exc) from exc
+
+
+def _position_id(row_idx: int, value: RawCellValue) -> int:
+    try:
+        return _cell_to_int(value)
+    except Exception as exc:
+        raise _position_row_error(row_idx, "position_id", value, exc) from exc
+
+
+def _closed_position_id(row_idx: int, value: RawCellValue) -> int:
+    try:
+        return _cell_to_int(value)
+    except Exception as exc:
+        raise _closed_position_row_error(row_idx, "position_id", value, exc) from exc
+
+
+def _position_stop_loss(row_idx: int, value: RawCellValue) -> Decimal | None:
+    try:
+        return _normalize_stop_loss(value)
+    except Exception as exc:
+        raise _position_row_error(row_idx, "sl", value, exc) from exc
 
 
 def _cell_to_int(value: RawCellValue) -> int:
