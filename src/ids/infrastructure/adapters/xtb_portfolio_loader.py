@@ -296,7 +296,6 @@ class XTBPortfolioLoader(PortfolioLoader):
         gross_pl_raw = self._row_cell(row, columns, row_idx, "gross_pl")
         sl_raw = self._row_cell(row, columns, row_idx, "sl")
 
-        symbol = _position_symbol(row_idx, self._row_cell(row, columns, row_idx, "symbol"))
         try:
             position_type = PositionType(type_raw)
         except Exception as exc:
@@ -352,7 +351,7 @@ class XTBPortfolioLoader(PortfolioLoader):
 
         return Position(
             id=position_id,
-            symbol=symbol,
+            symbol=_position_symbol(row_idx, self._row_cell(row, columns, row_idx, "symbol")),
             type=position_type,
             volume=volume,
             open_time=open_time,
@@ -442,9 +441,6 @@ class XTBPortfolioLoader(PortfolioLoader):
         purchase_value_raw = self._closed_row_cell(row, columns, row_idx, "purchase_value")
         gross_pl_raw = self._closed_row_cell(row, columns, row_idx, "gross_pl")
 
-        symbol = _closed_position_symbol(
-            row_idx, self._closed_row_cell(row, columns, row_idx, "symbol")
-        )
         try:
             position_type = PositionType(type_raw)
         except Exception as exc:
@@ -500,7 +496,9 @@ class XTBPortfolioLoader(PortfolioLoader):
 
         return ClosedPosition(
             id=position_id,
-            symbol=symbol,
+            symbol=_closed_position_symbol(
+                row_idx, self._closed_row_cell(row, columns, row_idx, "symbol")
+            ),
             type=position_type,
             volume=volume,
             open_time=open_time,
