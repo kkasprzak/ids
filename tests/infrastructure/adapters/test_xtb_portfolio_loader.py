@@ -79,11 +79,33 @@ def test_single_open_position_parsed_correctly(tmp_path: Path) -> None:
 
     position = _loader(input_dir).load_latest().positions[0]
 
-    assert position.symbol == "VWCE.DE"
-    assert position.open_price == Decimal("99.99")
-    assert position.market_price == Decimal("101.01")
+    assert str(position.symbol) == "VWCE.DE"
+    assert position.open_price.value == Decimal("99.99")
+    assert position.market_price.value == Decimal("101.01")
     assert position.gross_pl_pln == Decimal("10.2")
     assert position.sl is None
+
+
+def test_symbols_are_normalized_to_canonical_form(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(
+        input_dir,
+        positions=[{"Position": 11, "Symbol": " aaa.pl "}],
+        closed_positions=[{"Position": 501, "Symbol": " bbb-us "}],
+    )
+
+    snapshot = _loader(input_dir).load_latest()
+
+    assert str(snapshot.positions[0].symbol) == "AAA.PL"
+    assert str(snapshot.closed_positions[0].symbol) == "BBB-US"
+
+
+def test_invalid_symbol_reports_row_and_field(tmp_path: Path) -> None:
+    input_dir = tmp_path / "inputs"
+    _write_export(input_dir, positions=[{"Position": 11, "Symbol": "AAA PL"}])
+
+    with pytest.raises(PortfolioMalformedError, match=r"row 8, field `symbol`"):
+        _loader(input_dir).load_latest()
 
 
 def test_multiple_positions_parsed_order_preserved(tmp_path: Path) -> None:
@@ -99,7 +121,7 @@ def test_multiple_positions_parsed_order_preserved(tmp_path: Path) -> None:
     snapshot = _loader(input_dir).load_latest()
 
     assert tuple(position.id for position in snapshot.positions) == (11, 12)
-    assert tuple(position.symbol for position in snapshot.positions) == ("AAA", "BBB")
+    assert tuple(str(position.symbol) for position in snapshot.positions) == ("AAA", "BBB")
 
 
 def test_empty_open_positions_returns_empty_tuple(tmp_path: Path) -> None:
@@ -166,7 +188,7 @@ def test_latest_export_selection_by_as_of_date(tmp_path: Path) -> None:
 
     snapshot = _loader(input_dir).load_latest()
     assert snapshot.as_of_date == date(2026, 5, 9)
-    assert snapshot.positions[0].symbol == "NEWER"
+    assert str(snapshot.positions[0].symbol) == "NEWER"
 
 
 def test_directory_access_errors_raise_no_portfolio_available(
@@ -226,7 +248,7 @@ def test_non_ikze_file_silently_ignored(tmp_path: Path) -> None:
     )
 
     snapshot = _loader(input_dir).load_latest()
-    assert snapshot.positions[0].symbol == "IKZE"
+    assert str(snapshot.positions[0].symbol) == "IKZE"
 
 
 def test_no_matching_files_raises_with_filename_list(tmp_path: Path) -> None:
@@ -282,7 +304,7 @@ def test_non_standard_sheet_name_loads_via_semantic_fallback(tmp_path: Path) -> 
     wb.save(path)
 
     snapshot = _loader(input_dir).load_latest()
-    assert snapshot.positions[0].symbol == "FALLBACK"
+    assert str(snapshot.positions[0].symbol) == "FALLBACK"
 
 
 def test_multiple_sheets_with_position_table_raises_ambiguity(tmp_path: Path) -> None:
@@ -337,7 +359,7 @@ def test_load_from_path_bypass_loads_specific_file(tmp_path: Path) -> None:
 
     snapshot = _loader(input_dir).load_from_path(first)
     assert snapshot.as_of_date == date(2026, 5, 2)
-    assert snapshot.positions[0].symbol == "FIRST"
+    assert str(snapshot.positions[0].symbol) == "FIRST"
 
 
 def test_load_from_path_non_matching_filename_uses_export_datetime(tmp_path: Path) -> None:
@@ -398,7 +420,7 @@ def test_load_latest_falls_back_to_mtime_and_workbook_export_datetime(tmp_path: 
     os.utime(second, (second_mtime, second_mtime))
 
     snapshot = _loader(input_dir).load_latest()
-    assert snapshot.positions[0].symbol == "NEWER"
+    assert str(snapshot.positions[0].symbol) == "NEWER"
     assert snapshot.as_of_date == date(2026, 5, 3)
 
 
@@ -451,7 +473,7 @@ def test_position_header_beyond_original_row_20_is_found(tmp_path: Path) -> None
     path = tmp_path / "inputs" / _export_name("2026-05-02")
     _make_xlsx_with_row_offset(path, export_dt_row=2, account_label_row=5, position_header_row=22)
     snapshot = _loader(tmp_path / "inputs").load_latest()
-    assert snapshot.positions[0].symbol == "SHIFTED"
+    assert str(snapshot.positions[0].symbol) == "SHIFTED"
 
 
 def test_export_datetime_beyond_original_row_6_is_found(tmp_path: Path) -> None:
@@ -484,7 +506,7 @@ def test_column_labels_with_extra_whitespace_are_matched(tmp_path: Path) -> None
     _make_xlsx_with_custom_headers(path, padded)
 
     snapshot = _loader(tmp_path / "inputs").load_latest()
-    assert snapshot.positions[0].symbol == "TEST"
+    assert str(snapshot.positions[0].symbol) == "TEST"
 
 
 def test_column_labels_with_different_case_are_matched(tmp_path: Path) -> None:
@@ -493,7 +515,7 @@ def test_column_labels_with_different_case_are_matched(tmp_path: Path) -> None:
     _make_xlsx_with_custom_headers(path, uppercased)
 
     snapshot = _loader(tmp_path / "inputs").load_latest()
-    assert snapshot.positions[0].symbol == "TEST"
+    assert str(snapshot.positions[0].symbol) == "TEST"
 
 
 def test_gross_pl_ampersand_alias_is_accepted(tmp_path: Path) -> None:
@@ -655,9 +677,9 @@ def test_single_closed_position_parsed_correctly(tmp_path: Path) -> None:
     assert len(snapshot.closed_positions) == 1
     cp = snapshot.closed_positions[0]
     assert cp.id == 501  # noqa: PLR2004
-    assert cp.symbol == "VWCE.DE"
-    assert cp.open_price == Decimal("95.00")
-    assert cp.close_price == Decimal("102.50")
+    assert str(cp.symbol) == "VWCE.DE"
+    assert cp.open_price.value == Decimal("95.00")
+    assert cp.close_price.value == Decimal("102.50")
     assert cp.purchase_value_pln == Decimal("190.00")
     assert cp.gross_pl_pln == Decimal("15.00")
     assert cp.open_time.tzinfo == WARSAW
@@ -678,9 +700,9 @@ def test_mix_open_and_closed_positions(tmp_path: Path) -> None:
     snapshot = _loader(input_dir).load_latest()
 
     assert len(snapshot.positions) == 1
-    assert snapshot.positions[0].symbol == "OPEN1"
+    assert str(snapshot.positions[0].symbol) == "OPEN1"
     assert len(snapshot.closed_positions) == 2  # noqa: PLR2004
-    assert tuple(cp.symbol for cp in snapshot.closed_positions) == ("CLOSED1", "CLOSED2")
+    assert tuple(str(cp.symbol) for cp in snapshot.closed_positions) == ("CLOSED1", "CLOSED2")
 
 
 def test_empty_closed_sheet_yields_empty_tuple(tmp_path: Path) -> None:
@@ -704,9 +726,7 @@ def test_malformed_closed_position_row_raises_error(tmp_path: Path) -> None:
         closed_positions=[{"Close price": "NOT_A_NUMBER"}],
     )
 
-    with pytest.raises(
-        PortfolioMalformedError, match=r"closed-position row 12, field `close_price`"
-    ):
+    with pytest.raises(PortfolioMalformedError, match=r"row 12, field `close_price`"):
         _loader(input_dir).load_latest()
 
 
@@ -762,7 +782,7 @@ def test_closed_header_at_row_5_found(tmp_path: Path) -> None:
     _make_xlsx_with_closed_header_at_row(path, closed_header_row=5)
 
     snapshot = _loader(tmp_path / "inputs").load_latest()
-    assert snapshot.closed_positions[0].symbol == "OFFSET"
+    assert str(snapshot.closed_positions[0].symbol) == "OFFSET"
 
 
 def test_closed_header_at_row_15_found(tmp_path: Path) -> None:
@@ -771,7 +791,7 @@ def test_closed_header_at_row_15_found(tmp_path: Path) -> None:
     _make_xlsx_with_closed_header_at_row(path, closed_header_row=15)
 
     snapshot = _loader(tmp_path / "inputs").load_latest()
-    assert snapshot.closed_positions[0].symbol == "OFFSET"
+    assert str(snapshot.closed_positions[0].symbol) == "OFFSET"
 
 
 def test_closed_header_at_row_16_with_content_raises_malformed(tmp_path: Path) -> None:
@@ -833,7 +853,7 @@ def test_closed_position_with_zero_open_price_raises_with_row_context(tmp_path: 
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, closed_positions=[{"Open price": Decimal("0")}])
 
-    with pytest.raises(PortfolioMalformedError, match=r"closed-position row 12.*open_price"):
+    with pytest.raises(PortfolioMalformedError, match=r"row 12.*open_price"):
         _loader(input_dir).load_latest()
 
 
@@ -841,7 +861,7 @@ def test_closed_position_with_zero_close_price_raises_with_row_context(tmp_path:
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, closed_positions=[{"Close price": Decimal("0")}])
 
-    with pytest.raises(PortfolioMalformedError, match=r"closed-position row 12.*close_price"):
+    with pytest.raises(PortfolioMalformedError, match=r"row 12.*close_price"):
         _loader(input_dir).load_latest()
 
 
@@ -849,7 +869,7 @@ def test_position_with_zero_open_price_raises_with_row_context(tmp_path: Path) -
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, positions=[{"Open price": Decimal("0")}])
 
-    with pytest.raises(PortfolioMalformedError, match=r"open-position row 8.*open_price"):
+    with pytest.raises(PortfolioMalformedError, match=r"row 8.*open_price"):
         _loader(input_dir).load_latest()
 
 
@@ -857,7 +877,7 @@ def test_position_with_zero_market_price_raises_with_row_context(tmp_path: Path)
     input_dir = tmp_path / "inputs"
     _write_export(input_dir, positions=[{"Market price": Decimal("0")}])
 
-    with pytest.raises(PortfolioMalformedError, match=r"open-position row 8.*market_price"):
+    with pytest.raises(PortfolioMalformedError, match=r"row 8.*market_price"):
         _loader(input_dir).load_latest()
 
 
@@ -970,7 +990,7 @@ def test_closed_sheet_case_insensitive_name_match(tmp_path: Path) -> None:
     wb.save(path)
 
     snapshot = _loader(input_dir).load_latest()
-    assert snapshot.closed_positions[0].symbol == "CASE"
+    assert str(snapshot.closed_positions[0].symbol) == "CASE"
 
 
 def test_closed_sheet_with_trailing_whitespace_name_match(tmp_path: Path) -> None:
@@ -990,7 +1010,7 @@ def test_closed_sheet_with_trailing_whitespace_name_match(tmp_path: Path) -> Non
     wb.save(path)
 
     snapshot = _loader(input_dir).load_latest()
-    assert snapshot.closed_positions[0].symbol == "SPACE"
+    assert str(snapshot.closed_positions[0].symbol) == "SPACE"
 
 
 def test_closed_sheet_semantic_fallback_when_name_differs(tmp_path: Path) -> None:
@@ -1010,7 +1030,7 @@ def test_closed_sheet_semantic_fallback_when_name_differs(tmp_path: Path) -> Non
     wb.save(path)
 
     snapshot = _loader(input_dir).load_latest()
-    assert snapshot.closed_positions[0].symbol == "FALLBACK"
+    assert str(snapshot.closed_positions[0].symbol) == "FALLBACK"
 
 
 def test_multiple_closed_position_schema_sheets_raises_ambiguity(tmp_path: Path) -> None:

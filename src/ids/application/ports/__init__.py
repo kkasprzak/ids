@@ -4,6 +4,12 @@ from ids.application.ports.portfolio import (
     PortfolioLoaderError,
     PortfolioMalformedError,
 )
+from ids.application.ports.position_log_store import (
+    PositionLogEntry,
+    PositionLogStore,
+    PositionLogStoreError,
+    UpsertResult,
+)
 from ids.application.ports.report_writer import ReportWriter, ReportWriterError
 from ids.application.ports.snapshot_store import (
     SnapshotMalformedError,
@@ -17,10 +23,14 @@ __all__ = [
     "PortfolioLoader",
     "PortfolioLoaderError",
     "PortfolioMalformedError",
+    "PositionLogEntry",
+    "PositionLogStore",
+    "PositionLogStoreError",
     "ReportWriter",
     "ReportWriterError",
     "SnapshotMalformedError",
     "SnapshotNotFoundError",
     "SnapshotStore",
     "SnapshotStoreError",
+    "UpsertResult",
 ]

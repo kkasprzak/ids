@@ -5,6 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ids.domain.enums import AlertKind, AlertSeverity, PositionType
+from ids.domain.value_objects import Price, Symbol
 
 
 @dataclass(frozen=True)
@@ -20,37 +21,29 @@ class AccountSummary:
 @dataclass(frozen=True)
 class Position:
     id: int
-    symbol: str
+    symbol: Symbol
     type: PositionType
     volume: Decimal
     open_time: datetime
-    open_price: Decimal
-    market_price: Decimal
+    open_price: Price
+    market_price: Price
     purchase_value_pln: Decimal
     gross_pl_pln: Decimal
     sl: Decimal | None
-
-    def __post_init__(self) -> None:
-        _require_positive_decimal("Position", "open_price", self.open_price)
-        _require_positive_decimal("Position", "market_price", self.market_price)
 
 
 @dataclass(frozen=True)
 class ClosedPosition:
     id: int
-    symbol: str
+    symbol: Symbol
     type: PositionType
     volume: Decimal
     open_time: datetime
     close_time: datetime
-    open_price: Decimal
-    close_price: Decimal
+    open_price: Price
+    close_price: Price
     purchase_value_pln: Decimal
     gross_pl_pln: Decimal
-
-    def __post_init__(self) -> None:
-        _require_positive_decimal("ClosedPosition", "open_price", self.open_price)
-        _require_positive_decimal("ClosedPosition", "close_price", self.close_price)
 
 
 @dataclass(frozen=True)
@@ -69,11 +62,11 @@ class Alert:
     severity: AlertSeverity
     recommended_action: str
     position_id: int | None = None
-    symbol: str | None = None
+    symbol: Symbol | None = None
     measured_pct: Decimal | None = None
 
     @classmethod
-    def missing_stop_loss(cls, *, position_id: int, symbol: str) -> "Alert":
+    def missing_stop_loss(cls, *, position_id: int, symbol: Symbol) -> "Alert":
         return cls(
             kind=AlertKind.MISSING_STOP_LOSS,
             severity=AlertSeverity.WARNING,
@@ -83,7 +76,9 @@ class Alert:
         )
 
     @classmethod
-    def stop_loss_breach(cls, *, position_id: int, symbol: str, measured_pct: Decimal) -> "Alert":
+    def stop_loss_breach(
+        cls, *, position_id: int, symbol: Symbol, measured_pct: Decimal
+    ) -> "Alert":
         return cls(
             kind=AlertKind.STOP_LOSS_BREACH,
             severity=AlertSeverity.ACTION_REQUIRED,
@@ -95,7 +90,7 @@ class Alert:
 
     @classmethod
     def profit_take_opportunity(
-        cls, *, position_id: int, symbol: str, measured_pct: Decimal
+        cls, *, position_id: int, symbol: Symbol, measured_pct: Decimal
     ) -> "Alert":
         return cls(
             kind=AlertKind.PROFIT_TAKE_OPPORTUNITY,

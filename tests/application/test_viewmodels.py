@@ -4,6 +4,7 @@ import pytest
 
 from ids.application.viewmodels import AlertView
 from ids.domain.models import Alert
+from ids.domain.value_objects import Symbol
 
 pytestmark = pytest.mark.unit
 
@@ -13,7 +14,7 @@ POSITION_ID = 123
 def test_alert_view_factory_maps_position_alert_fields() -> None:
     alert = Alert.stop_loss_breach(
         position_id=POSITION_ID,
-        symbol="PKN.PL",
+        symbol=Symbol("PKN.PL"),
         measured_pct=Decimal("-6.50"),
     )
 

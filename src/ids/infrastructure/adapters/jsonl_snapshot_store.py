@@ -14,6 +14,7 @@ from ids.application.ports.snapshot_store import (
 from ids.domain.enums import PositionType
 from ids.domain.models import AccountSummary, ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.timezones import WARSAW
+from ids.domain.value_objects import Price, Symbol
 
 
 class JSONLSnapshotStore(SnapshotStore):
@@ -149,12 +150,12 @@ def _snapshot_to_dto(snapshot: PortfolioSnapshot) -> _SnapshotV2DTO:
 def _position_to_dto(position: Position) -> _PositionDTO:
     return _PositionDTO(
         id=position.id,
-        symbol=position.symbol,
+        symbol=str(position.symbol),
         type=position.type,
         volume=position.volume,
         open_time=_to_utc(position.open_time),
-        open_price=position.open_price,
-        market_price=position.market_price,
+        open_price=position.open_price.value,
+        market_price=position.market_price.value,
         purchase_value_pln=position.purchase_value_pln,
         gross_pl_pln=position.gross_pl_pln,
         sl=position.sl,
@@ -164,13 +165,13 @@ def _position_to_dto(position: Position) -> _PositionDTO:
 def _closed_position_to_dto(position: ClosedPosition) -> _ClosedPositionDTO:
     return _ClosedPositionDTO(
         id=position.id,
-        symbol=position.symbol,
+        symbol=str(position.symbol),
         type=position.type,
         volume=position.volume,
         open_time=_to_utc(position.open_time),
         close_time=_to_utc(position.close_time),
-        open_price=position.open_price,
-        close_price=position.close_price,
+        open_price=position.open_price.value,
+        close_price=position.close_price.value,
         purchase_value_pln=position.purchase_value_pln,
         gross_pl_pln=position.gross_pl_pln,
     )
@@ -209,12 +210,12 @@ def _dto_to_snapshot(dto: _SnapshotDTO) -> PortfolioSnapshot:
 def _dto_to_position(dto: _PositionDTO) -> Position:
     return Position(
         id=dto.id,
-        symbol=dto.symbol,
+        symbol=Symbol(dto.symbol),
         type=dto.type,
         volume=dto.volume,
         open_time=_to_warsaw(dto.open_time),
-        open_price=dto.open_price,
-        market_price=dto.market_price,
+        open_price=_dto_price("open_price", dto.open_price),
+        market_price=_dto_price("market_price", dto.market_price),
         purchase_value_pln=dto.purchase_value_pln,
         gross_pl_pln=dto.gross_pl_pln,
         sl=dto.sl,
@@ -224,16 +225,23 @@ def _dto_to_position(dto: _PositionDTO) -> Position:
 def _dto_to_closed_position(dto: _ClosedPositionDTO) -> ClosedPosition:
     return ClosedPosition(
         id=dto.id,
-        symbol=dto.symbol,
+        symbol=Symbol(dto.symbol),
         type=dto.type,
         volume=dto.volume,
         open_time=_to_warsaw(dto.open_time),
         close_time=_to_warsaw(dto.close_time),
-        open_price=dto.open_price,
-        close_price=dto.close_price,
+        open_price=_dto_price("open_price", dto.open_price),
+        close_price=_dto_price("close_price", dto.close_price),
         purchase_value_pln=dto.purchase_value_pln,
         gross_pl_pln=dto.gross_pl_pln,
     )
+
+
+def _dto_price(field_name: str, value: Decimal) -> Price:
+    try:
+        return Price(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name}: {exc}") from exc
 
 
 def _to_warsaw(value: datetime) -> datetime:

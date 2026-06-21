@@ -38,11 +38,11 @@ def build_weekly_snapshot(
         pnl_pct = _pct_or_zero(pnl_pln, position.purchase_value_pln)
         rows.append(
             PositionRow(
-                symbol=position.symbol,
+                symbol=str(position.symbol),
                 open_date=open_date,
                 days_held=days_held,
-                open_price=position.open_price,
-                market_price=position.market_price,
+                open_price=position.open_price.value,
+                market_price=position.market_price.value,
                 pnl_pln=pnl_pln,
                 pnl_pct=pnl_pct,
                 has_alert=position.id in flagged_position_ids,

@@ -3,6 +3,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import TextIO
 
 import pytest
 
@@ -147,8 +148,8 @@ def test_decimal_precision_preserved(
 
     loaded = store.load(snapshot.as_of_date)
 
-    assert loaded.positions[0].open_price == precise
-    assert loaded.positions[0].market_price == precise
+    assert loaded.positions[0].open_price.value == precise
+    assert loaded.positions[0].market_price.value == precise
 
 
 def test_datetime_warsaw_aware_round_trip(
@@ -302,10 +303,16 @@ def test_save_wraps_filesystem_errors_in_snapshot_store_error(
     snapshot = make_snapshot()
     original_write_text = Path.write_text
 
-    def fail_write_text(self: Path, *args: object, **kwargs: object) -> int:
+    def fail_write_text(
+        self: Path,
+        data: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> int:
         if self == _snapshot_path(tmp_path):
             raise PermissionError("blocked")
-        return original_write_text(self, *args, **kwargs)
+        return original_write_text(self, data, encoding=encoding, errors=errors, newline=newline)
 
     monkeypatch.setattr(Path, "write_text", fail_write_text)
 
@@ -321,10 +328,10 @@ def test_load_wraps_filesystem_errors_in_snapshot_store_error(
     store.save(snapshot)
     original_open = Path.open
 
-    def fail_open(self: Path, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+    def fail_open(self: Path, encoding: str | None = None) -> TextIO:
         if self == _snapshot_path(tmp_path):
             raise PermissionError("blocked")
-        return original_open(self, *args, **kwargs)
+        return original_open(self, encoding=encoding)
 
     monkeypatch.setattr(Path, "open", fail_open)
 
