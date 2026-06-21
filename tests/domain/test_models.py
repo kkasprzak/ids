@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 
 from ids.domain.enums import AlertKind, PositionType
-from ids.domain.models import AccountSummary, Alert, PortfolioSnapshot, Position
+from ids.domain.models import AccountSummary, Alert, ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.value_objects import Symbol
 
 pytestmark = pytest.mark.unit
@@ -36,7 +36,7 @@ def test_position_requires_positive_open_price(
     make_position: Callable[..., Position],
     open_price: Decimal,
 ) -> None:
-    with pytest.raises(ValueError, match=r"Position\.open_price must be positive"):
+    with pytest.raises(ValueError, match="Price must be positive"):
         make_position(open_price=open_price)
 
 
@@ -45,8 +45,26 @@ def test_position_requires_positive_market_price(
     make_position: Callable[..., Position],
     market_price: Decimal,
 ) -> None:
-    with pytest.raises(ValueError, match=r"Position\.market_price must be positive"):
+    with pytest.raises(ValueError, match="Price must be positive"):
         make_position(market_price=market_price)
+
+
+@pytest.mark.parametrize("open_price", [Decimal("0"), Decimal("-1")])
+def test_closed_position_requires_positive_open_price(
+    make_closed_position: Callable[..., ClosedPosition],
+    open_price: Decimal,
+) -> None:
+    with pytest.raises(ValueError, match="Price must be positive"):
+        make_closed_position(open_price=open_price)
+
+
+@pytest.mark.parametrize("close_price", [Decimal("0"), Decimal("-1")])
+def test_closed_position_requires_positive_close_price(
+    make_closed_position: Callable[..., ClosedPosition],
+    close_price: Decimal,
+) -> None:
+    with pytest.raises(ValueError, match="Price must be positive"):
+        make_closed_position(close_price=close_price)
 
 
 def test_alert_classifies_position_and_portfolio_scope() -> None:

@@ -16,7 +16,7 @@ from ids.application.ports.portfolio import (
 from ids.domain.enums import PositionType
 from ids.domain.models import AccountSummary, ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.timezones import WARSAW
-from ids.domain.value_objects import Symbol
+from ids.domain.value_objects import Price, Symbol
 from ids.infrastructure.adapters.xtb_filename import parse_xtb_account_id, parse_xtb_filename
 
 log = logging.getLogger(__name__)
@@ -286,31 +286,6 @@ class XTBPortfolioLoader(PortfolioLoader):
         return positions
 
     def _row_to_position(self, row: RawDataRow, columns: ColumnIndexes, row_idx: int) -> Position:
-        open_price_raw = self._row_cell(row, columns, row_idx, "open_price")
-        market_price_raw = self._row_cell(row, columns, row_idx, "market_price")
-
-        try:
-            open_price = _cell_to_decimal(open_price_raw)
-        except Exception as exc:
-            raise _row_error(row_idx, "open_price", open_price_raw, exc) from exc
-        if open_price <= 0:
-            raise _row_error(
-                row_idx,
-                "open_price",
-                open_price_raw,
-                ValueError(f"open_price must be positive (got {open_price})"),
-            )
-        try:
-            market_price = _cell_to_decimal(market_price_raw)
-        except Exception as exc:
-            raise _row_error(row_idx, "market_price", market_price_raw, exc) from exc
-        if market_price <= 0:
-            raise _row_error(
-                row_idx,
-                "market_price",
-                market_price_raw,
-                ValueError(f"market_price must be positive (got {market_price})"),
-            )
         return Position(
             id=_row_id(row_idx, self._row_cell(row, columns, row_idx, "position_id")),
             symbol=_row_symbol(row_idx, self._row_cell(row, columns, row_idx, "symbol")),
@@ -319,8 +294,12 @@ class XTBPortfolioLoader(PortfolioLoader):
             open_time=_row_datetime(
                 row_idx, "open_time", self._row_cell(row, columns, row_idx, "open_time")
             ),
-            open_price=open_price,
-            market_price=market_price,
+            open_price=_row_price(
+                row_idx, "open_price", self._row_cell(row, columns, row_idx, "open_price")
+            ),
+            market_price=_row_price(
+                row_idx, "market_price", self._row_cell(row, columns, row_idx, "market_price")
+            ),
             purchase_value_pln=_row_decimal(
                 row_idx,
                 "purchase_value",
@@ -401,31 +380,6 @@ class XTBPortfolioLoader(PortfolioLoader):
     def _row_to_closed_position(
         self, row: RawDataRow, columns: ColumnIndexes, row_idx: int
     ) -> ClosedPosition:
-        open_price_raw = self._closed_row_cell(row, columns, row_idx, "open_price")
-        close_price_raw = self._closed_row_cell(row, columns, row_idx, "close_price")
-
-        try:
-            open_price = _cell_to_decimal(open_price_raw)
-        except Exception as exc:
-            raise _row_error(row_idx, "open_price", open_price_raw, exc) from exc
-        if open_price <= 0:
-            raise _row_error(
-                row_idx,
-                "open_price",
-                open_price_raw,
-                ValueError(f"open_price must be positive (got {open_price})"),
-            )
-        try:
-            close_price = _cell_to_decimal(close_price_raw)
-        except Exception as exc:
-            raise _row_error(row_idx, "close_price", close_price_raw, exc) from exc
-        if close_price <= 0:
-            raise _row_error(
-                row_idx,
-                "close_price",
-                close_price_raw,
-                ValueError(f"close_price must be positive (got {close_price})"),
-            )
         return ClosedPosition(
             id=_row_id(row_idx, self._closed_row_cell(row, columns, row_idx, "position_id")),
             symbol=_row_symbol(row_idx, self._closed_row_cell(row, columns, row_idx, "symbol")),
@@ -439,8 +393,16 @@ class XTBPortfolioLoader(PortfolioLoader):
             close_time=_row_datetime(
                 row_idx, "close_time", self._closed_row_cell(row, columns, row_idx, "close_time")
             ),
-            open_price=open_price,
-            close_price=close_price,
+            open_price=_row_price(
+                row_idx,
+                "open_price",
+                self._closed_row_cell(row, columns, row_idx, "open_price"),
+            ),
+            close_price=_row_price(
+                row_idx,
+                "close_price",
+                self._closed_row_cell(row, columns, row_idx, "close_price"),
+            ),
             purchase_value_pln=_row_decimal(
                 row_idx,
                 "purchase_value",
@@ -573,6 +535,13 @@ def _row_type(row_idx: int, value: RawCellValue) -> PositionType:
 def _row_decimal(row_idx: int, field_name: str, value: RawCellValue) -> Decimal:
     try:
         return _cell_to_decimal(value)
+    except Exception as exc:
+        raise _row_error(row_idx, field_name, value, exc) from exc
+
+
+def _row_price(row_idx: int, field_name: str, value: RawCellValue) -> Price:
+    try:
+        return Price(_cell_to_decimal(value))
     except Exception as exc:
         raise _row_error(row_idx, field_name, value, exc) from exc
 

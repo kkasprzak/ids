@@ -80,8 +80,8 @@ def test_single_open_position_parsed_correctly(tmp_path: Path) -> None:
     position = _loader(input_dir).load_latest().positions[0]
 
     assert str(position.symbol) == "VWCE.DE"
-    assert position.open_price == Decimal("99.99")
-    assert position.market_price == Decimal("101.01")
+    assert position.open_price.value == Decimal("99.99")
+    assert position.market_price.value == Decimal("101.01")
     assert position.gross_pl_pln == Decimal("10.2")
     assert position.sl is None
 
@@ -678,8 +678,8 @@ def test_single_closed_position_parsed_correctly(tmp_path: Path) -> None:
     cp = snapshot.closed_positions[0]
     assert cp.id == 501  # noqa: PLR2004
     assert str(cp.symbol) == "VWCE.DE"
-    assert cp.open_price == Decimal("95.00")
-    assert cp.close_price == Decimal("102.50")
+    assert cp.open_price.value == Decimal("95.00")
+    assert cp.close_price.value == Decimal("102.50")
     assert cp.purchase_value_pln == Decimal("190.00")
     assert cp.gross_pl_pln == Decimal("15.00")
     assert cp.open_time.tzinfo == WARSAW

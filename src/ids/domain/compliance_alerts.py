@@ -57,11 +57,11 @@ def _position_alerts(position: Position) -> tuple[Alert, ...]:
 
 
 def _position_pnl_pct(position: Position) -> Decimal:
-    price_delta = position.market_price - position.open_price
+    price_delta = position.market_price.value - position.open_price.value
     if position.type is PositionType.SELL:
         price_delta = -price_delta
 
-    return price_delta / position.open_price * HUNDRED
+    return price_delta / position.open_price.value * HUNDRED
 
 
 def _pct(numerator: Decimal, denominator: Decimal) -> Decimal:

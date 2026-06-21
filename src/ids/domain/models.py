@@ -5,7 +5,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from ids.domain.enums import AlertKind, AlertSeverity, PositionType
-from ids.domain.value_objects import Symbol
+from ids.domain.value_objects import Price, Symbol
 
 
 @dataclass(frozen=True)
@@ -25,15 +25,11 @@ class Position:
     type: PositionType
     volume: Decimal
     open_time: datetime
-    open_price: Decimal
-    market_price: Decimal
+    open_price: Price
+    market_price: Price
     purchase_value_pln: Decimal
     gross_pl_pln: Decimal
     sl: Decimal | None
-
-    def __post_init__(self) -> None:
-        _require_positive_decimal("Position", "open_price", self.open_price)
-        _require_positive_decimal("Position", "market_price", self.market_price)
 
 
 @dataclass(frozen=True)
@@ -44,14 +40,10 @@ class ClosedPosition:
     volume: Decimal
     open_time: datetime
     close_time: datetime
-    open_price: Decimal
-    close_price: Decimal
+    open_price: Price
+    close_price: Price
     purchase_value_pln: Decimal
     gross_pl_pln: Decimal
-
-    def __post_init__(self) -> None:
-        _require_positive_decimal("ClosedPosition", "open_price", self.open_price)
-        _require_positive_decimal("ClosedPosition", "close_price", self.close_price)
 
 
 @dataclass(frozen=True)

@@ -148,8 +148,8 @@ def test_decimal_precision_preserved(
 
     loaded = store.load(snapshot.as_of_date)
 
-    assert loaded.positions[0].open_price == precise
-    assert loaded.positions[0].market_price == precise
+    assert loaded.positions[0].open_price.value == precise
+    assert loaded.positions[0].market_price.value == precise
 
 
 def test_datetime_warsaw_aware_round_trip(

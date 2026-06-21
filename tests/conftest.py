@@ -10,7 +10,7 @@ from ids.domain.enums import PositionType
 from ids.domain.models import AccountSummary, ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.strategy_rules import PROFIT_TAKE_PCT, STOP_LOSS_PCT
 from ids.domain.timezones import WARSAW
-from ids.domain.value_objects import Symbol
+from ids.domain.value_objects import Price, Symbol
 
 
 def make_account(
@@ -47,8 +47,8 @@ def make_position(  # noqa: PLR0913
         type=type,
         volume=volume,
         open_time=position_open_time,
-        open_price=open_price,
-        market_price=market_price,
+        open_price=Price(open_price),
+        market_price=Price(market_price),
         purchase_value_pln=purchase_value_pln,
         gross_pl_pln=gross_pl_pln,
         sl=sl,
@@ -77,8 +77,8 @@ def make_closed_position(  # noqa: PLR0913
         volume=volume,
         open_time=position_open_time,
         close_time=position_close_time,
-        open_price=open_price,
-        close_price=close_price,
+        open_price=Price(open_price),
+        close_price=Price(close_price),
         purchase_value_pln=purchase_value_pln,
         gross_pl_pln=gross_pl_pln,
     )
