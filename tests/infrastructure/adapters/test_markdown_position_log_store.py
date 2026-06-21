@@ -7,6 +7,7 @@ import frontmatter  # pyright: ignore[reportMissingTypeStubs]
 import pytest
 
 from ids.application.ports import PositionLogEntry, PositionLogStoreError, UpsertResult
+from ids.domain.value_objects import Symbol
 from ids.infrastructure.adapters.markdown_position_log_store import MarkdownPositionLogStore
 
 pytestmark = pytest.mark.integration
@@ -29,7 +30,7 @@ def _entry(
 ) -> PositionLogEntry:
     return PositionLogEntry(
         open_date=open_date,
-        symbol=symbol,
+        symbol=Symbol(symbol),
         frontmatter=frontmatter
         or {
             "status": "open",

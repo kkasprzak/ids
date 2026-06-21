@@ -7,6 +7,7 @@ from ids.domain.compliance_alerts import evaluate_compliance_alerts
 from ids.domain.enums import AlertKind, AlertSeverity, PositionType
 from ids.domain.models import AccountSummary, Alert, PortfolioSnapshot, Position
 from ids.domain.strategy_rules import MIN_CASH_RESERVE_PCT, PROFIT_TAKE_PCT, STOP_LOSS_PCT
+from ids.domain.value_objects import Symbol
 
 pytestmark = pytest.mark.unit
 
@@ -48,7 +49,7 @@ def test_position_without_stop_loss_gets_missing_stop_loss_alert(
             kind=AlertKind.MISSING_STOP_LOSS,
             severity=AlertSeverity.WARNING,
             position_id=42,
-            symbol="PKN.PL",
+            symbol=Symbol("PKN.PL"),
             recommended_action="Set a protective stop-loss in XTB.",
         ),
     )
@@ -75,7 +76,7 @@ def test_loss_beyond_strategy_threshold_gets_stop_loss_breach_alert(
             kind=AlertKind.STOP_LOSS_BREACH,
             severity=AlertSeverity.ACTION_REQUIRED,
             position_id=7,
-            symbol="LOSS.PL",
+            symbol=Symbol("LOSS.PL"),
             measured_pct=loss_pct,
             recommended_action="Close manually or set a protective stop in XTB.",
         ),

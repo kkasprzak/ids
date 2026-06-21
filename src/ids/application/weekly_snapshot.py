@@ -38,7 +38,7 @@ def build_weekly_snapshot(
         pnl_pct = _pct_or_zero(pnl_pln, position.purchase_value_pln)
         rows.append(
             PositionRow(
-                symbol=position.symbol,
+                symbol=str(position.symbol),
                 open_date=open_date,
                 days_held=days_held,
                 open_price=position.open_price,

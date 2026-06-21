@@ -5,6 +5,7 @@ import pytest
 
 from ids.domain.enums import AlertKind, PositionType
 from ids.domain.models import AccountSummary, Alert, PortfolioSnapshot, Position
+from ids.domain.value_objects import Symbol
 
 pytestmark = pytest.mark.unit
 SCHEMA_V2 = 2
@@ -49,7 +50,7 @@ def test_position_requires_positive_market_price(
 
 
 def test_alert_classifies_position_and_portfolio_scope() -> None:
-    position_alert = Alert.missing_stop_loss(position_id=42, symbol="PKN.PL")
+    position_alert = Alert.missing_stop_loss(position_id=42, symbol=Symbol("PKN.PL"))
     portfolio_alert = Alert.cash_reserve_below_minimum(measured_pct=Decimal("9.99"))
 
     assert position_alert.is_position_alert() is True
@@ -59,10 +60,12 @@ def test_alert_classifies_position_and_portfolio_scope() -> None:
 
 
 def test_alert_factory_methods_define_required_signatures() -> None:
-    missing_sl = Alert.missing_stop_loss(position_id=1, symbol="AAA.PL")
-    breach = Alert.stop_loss_breach(position_id=2, symbol="BBB.PL", measured_pct=Decimal("-5.25"))
+    missing_sl = Alert.missing_stop_loss(position_id=1, symbol=Symbol("AAA.PL"))
+    breach = Alert.stop_loss_breach(
+        position_id=2, symbol=Symbol("BBB.PL"), measured_pct=Decimal("-5.25")
+    )
     profit = Alert.profit_take_opportunity(
-        position_id=3, symbol="CCC.PL", measured_pct=Decimal("15.00")
+        position_id=3, symbol=Symbol("CCC.PL"), measured_pct=Decimal("15.00")
     )
     cash = Alert.cash_reserve_below_minimum(measured_pct=Decimal("9.99"))
 

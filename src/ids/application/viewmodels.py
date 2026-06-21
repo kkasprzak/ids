@@ -38,7 +38,7 @@ class AlertView:
             severity=alert.severity,
             recommended_action=alert.recommended_action,
             position_id=alert.position_id,
-            symbol=alert.symbol,
+            symbol=str(alert.symbol) if alert.symbol is not None else None,
             measured_pct=alert.measured_pct,
         )
 

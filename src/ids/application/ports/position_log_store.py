@@ -4,12 +4,13 @@ from datetime import date
 from typing import Protocol
 
 from ids.domain.errors import IDSError
+from ids.domain.value_objects import Symbol
 
 
 @dataclass(frozen=True)
 class PositionLogEntry:
     open_date: date
-    symbol: str
+    symbol: Symbol
     frontmatter: dict[str, object]
 
 

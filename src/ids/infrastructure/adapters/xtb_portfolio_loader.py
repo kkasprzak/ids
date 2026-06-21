@@ -16,6 +16,7 @@ from ids.application.ports.portfolio import (
 from ids.domain.enums import PositionType
 from ids.domain.models import AccountSummary, ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.timezones import WARSAW
+from ids.domain.value_objects import Symbol
 from ids.infrastructure.adapters.xtb_filename import parse_xtb_account_id, parse_xtb_filename
 
 log = logging.getLogger(__name__)
@@ -286,7 +287,6 @@ class XTBPortfolioLoader(PortfolioLoader):
 
     def _row_to_position(self, row: RawDataRow, columns: ColumnIndexes, row_idx: int) -> Position:
         position_id_raw = self._row_cell(row, columns, row_idx, "position_id")
-        symbol_raw = self._row_cell(row, columns, row_idx, "symbol")
         type_raw = self._row_cell(row, columns, row_idx, "type")
         volume_raw = self._row_cell(row, columns, row_idx, "volume")
         open_time_raw = self._row_cell(row, columns, row_idx, "open_time")
@@ -296,6 +296,7 @@ class XTBPortfolioLoader(PortfolioLoader):
         gross_pl_raw = self._row_cell(row, columns, row_idx, "gross_pl")
         sl_raw = self._row_cell(row, columns, row_idx, "sl")
 
+        symbol = _position_symbol(row_idx, self._row_cell(row, columns, row_idx, "symbol"))
         try:
             position_type = PositionType(type_raw)
         except Exception as exc:
@@ -351,7 +352,7 @@ class XTBPortfolioLoader(PortfolioLoader):
 
         return Position(
             id=position_id,
-            symbol=str(symbol_raw),
+            symbol=symbol,
             type=position_type,
             volume=volume,
             open_time=open_time,
@@ -432,7 +433,6 @@ class XTBPortfolioLoader(PortfolioLoader):
         self, row: RawDataRow, columns: ColumnIndexes, row_idx: int
     ) -> ClosedPosition:
         position_id_raw = self._closed_row_cell(row, columns, row_idx, "position_id")
-        symbol_raw = self._closed_row_cell(row, columns, row_idx, "symbol")
         type_raw = self._closed_row_cell(row, columns, row_idx, "type")
         volume_raw = self._closed_row_cell(row, columns, row_idx, "volume")
         open_time_raw = self._closed_row_cell(row, columns, row_idx, "open_time")
@@ -442,6 +442,9 @@ class XTBPortfolioLoader(PortfolioLoader):
         purchase_value_raw = self._closed_row_cell(row, columns, row_idx, "purchase_value")
         gross_pl_raw = self._closed_row_cell(row, columns, row_idx, "gross_pl")
 
+        symbol = _closed_position_symbol(
+            row_idx, self._closed_row_cell(row, columns, row_idx, "symbol")
+        )
         try:
             position_type = PositionType(type_raw)
         except Exception as exc:
@@ -497,7 +500,7 @@ class XTBPortfolioLoader(PortfolioLoader):
 
         return ClosedPosition(
             id=position_id,
-            symbol=str(symbol_raw),
+            symbol=symbol,
             type=position_type,
             volume=volume,
             open_time=open_time,
@@ -605,6 +608,26 @@ def _cell_to_decimal(value: RawCellValue) -> Decimal:
     if isinstance(value, Decimal):
         return value
     return Decimal(str(value))
+
+
+def _cell_to_symbol(value: RawCellValue) -> Symbol:
+    if value is None:
+        raise PortfolioMalformedError("Expected symbol, got None")
+    return Symbol(str(value))
+
+
+def _position_symbol(row_idx: int, value: RawCellValue) -> Symbol:
+    try:
+        return _cell_to_symbol(value)
+    except Exception as exc:
+        raise _position_row_error(row_idx, "symbol", value, exc) from exc
+
+
+def _closed_position_symbol(row_idx: int, value: RawCellValue) -> Symbol:
+    try:
+        return _cell_to_symbol(value)
+    except Exception as exc:
+        raise _closed_position_row_error(row_idx, "symbol", value, exc) from exc
 
 
 def _cell_to_int(value: RawCellValue) -> int:

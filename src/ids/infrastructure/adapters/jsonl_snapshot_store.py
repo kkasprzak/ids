@@ -14,6 +14,7 @@ from ids.application.ports.snapshot_store import (
 from ids.domain.enums import PositionType
 from ids.domain.models import AccountSummary, ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.timezones import WARSAW
+from ids.domain.value_objects import Symbol
 
 
 class JSONLSnapshotStore(SnapshotStore):
@@ -149,7 +150,7 @@ def _snapshot_to_dto(snapshot: PortfolioSnapshot) -> _SnapshotV2DTO:
 def _position_to_dto(position: Position) -> _PositionDTO:
     return _PositionDTO(
         id=position.id,
-        symbol=position.symbol,
+        symbol=str(position.symbol),
         type=position.type,
         volume=position.volume,
         open_time=_to_utc(position.open_time),
@@ -164,7 +165,7 @@ def _position_to_dto(position: Position) -> _PositionDTO:
 def _closed_position_to_dto(position: ClosedPosition) -> _ClosedPositionDTO:
     return _ClosedPositionDTO(
         id=position.id,
-        symbol=position.symbol,
+        symbol=str(position.symbol),
         type=position.type,
         volume=position.volume,
         open_time=_to_utc(position.open_time),
@@ -209,7 +210,7 @@ def _dto_to_snapshot(dto: _SnapshotDTO) -> PortfolioSnapshot:
 def _dto_to_position(dto: _PositionDTO) -> Position:
     return Position(
         id=dto.id,
-        symbol=dto.symbol,
+        symbol=Symbol(dto.symbol),
         type=dto.type,
         volume=dto.volume,
         open_time=_to_warsaw(dto.open_time),
@@ -224,7 +225,7 @@ def _dto_to_position(dto: _PositionDTO) -> Position:
 def _dto_to_closed_position(dto: _ClosedPositionDTO) -> ClosedPosition:
     return ClosedPosition(
         id=dto.id,
-        symbol=dto.symbol,
+        symbol=Symbol(dto.symbol),
         type=dto.type,
         volume=dto.volume,
         open_time=_to_warsaw(dto.open_time),
