@@ -18,7 +18,7 @@ def position_pnl_pct(
     open_price: Price, current_price: Price, position_type: PositionType
 ) -> Decimal:
     """Signed profit/loss percentage of a position relative to its open price."""
-    price_delta = current_price.value - open_price.value
+    price_delta = current_price - open_price
     if position_type is PositionType.SELL:
         price_delta = -price_delta
 
