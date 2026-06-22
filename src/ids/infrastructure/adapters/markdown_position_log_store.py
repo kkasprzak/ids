@@ -1,6 +1,7 @@
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime
 from decimal import Decimal
+from enum import Enum
 from pathlib import Path
 from typing import cast
 
@@ -20,6 +21,14 @@ _SCAFFOLDING_SECTIONS = (
     "## Open rationale",
     "## Close rationale",
     "## Review history",
+)
+
+# Moment-of-decision context structs are written once and then frozen. The
+# adapter refuses to overwrite them on refresh: whatever value already lives in
+# the file wins over any incoming value for these keys.
+_IMMUTABLE_FRONTMATTER_KEYS = (
+    "context_at_open",
+    "context_at_close",
 )
 
 
@@ -79,7 +88,7 @@ class MarkdownPositionLogStore(PositionLogStore):
     def _refresh_existing(self, path: Path, entry: PositionLogEntry) -> object:
         post = frontmatter.load(str(path), handler=self._handler)
         previous_status = _metadata_value(post.metadata, "status")
-        post.metadata = _normalized_frontmatter(entry.frontmatter)
+        post.metadata = _refreshed_metadata(entry.frontmatter, post.metadata)
         post.content = _with_missing_sections(post.content)
         path.write_text(frontmatter.dumps(post, handler=self._handler) + "\n", encoding="utf-8")
         return previous_status
@@ -89,11 +98,23 @@ def _metadata_value(metadata: dict[str, object], key: str) -> object:
     return metadata.get(key)
 
 
+def _refreshed_metadata(
+    incoming: dict[str, object], existing: dict[str, object]
+) -> dict[str, object]:
+    metadata = _normalized_frontmatter(incoming)
+    for key in _IMMUTABLE_FRONTMATTER_KEYS:
+        if key in existing:
+            metadata[key] = existing[key]
+    return metadata
+
+
 def _normalized_frontmatter(frontmatter: dict[str, object]) -> dict[str, object]:
     return {key: _normalized_value(value) for key, value in frontmatter.items()}
 
 
 def _normalized_value(value: object) -> object:
+    if isinstance(value, Enum):
+        return _normalized_value(cast(object, value.value))
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, Mapping):

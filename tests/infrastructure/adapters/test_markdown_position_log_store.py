@@ -2,11 +2,13 @@ from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 import frontmatter  # pyright: ignore[reportMissingTypeStubs]
 import pytest
 
 from ids.application.ports import PositionLogEntry, PositionLogStoreError, UpsertResult
+from ids.domain.enums import AlertKind
 from ids.domain.value_objects import Symbol
 from ids.infrastructure.adapters.markdown_position_log_store import MarkdownPositionLogStore
 
@@ -210,6 +212,88 @@ def test_wraps_filesystem_write_errors_in_position_log_store_error(
 
     with pytest.raises(PositionLogStoreError, match="Failed to upsert position logs"):
         store.upsert_metadata((_entry(),))
+
+
+def _context_at_open(*, equity: str) -> dict[str, object]:
+    return {
+        "portfolio_equity_pln": Decimal(equity),
+        "cash_reserve_pct": Decimal("25"),
+        "open_positions_count": 3,
+        "this_position_pct_of_portfolio": Decimal("12.5"),
+        "strategy_rules_satisfied": [AlertKind.MISSING_STOP_LOSS, AlertKind.STOP_LOSS_BREACH],
+        "strategy_rules_violated": [AlertKind.CASH_RESERVE_BELOW_MINIMUM],
+    }
+
+
+def _context_block(rendered: str) -> str:
+    start = rendered.index("context_at_open:")
+    end = rendered.index("\n---", start)
+    return rendered[start:end]
+
+
+def test_enum_rule_ids_serialize_as_plain_strings(tmp_path: Path) -> None:
+    entry = _entry(
+        frontmatter={
+            "status": "open",
+            "symbol": "AAA.PL",
+            "context_at_open": _context_at_open(equity="2000"),
+        }
+    )
+
+    _upsert(tmp_path, (entry,))
+
+    rendered = _path(tmp_path).read_text(encoding="utf-8")
+    assert "!!python" not in rendered
+    metadata = frontmatter.load(str(_path(tmp_path))).metadata
+    context = cast("dict[str, object]", metadata["context_at_open"])
+    assert context["strategy_rules_satisfied"] == ["MISSING_STOP_LOSS", "STOP_LOSS_BREACH"]
+    assert context["strategy_rules_violated"] == ["CASH_RESERVE_BELOW_MINIMUM"]
+
+
+def test_context_at_open_is_immutable_across_refresh_with_different_state(tmp_path: Path) -> None:
+    original = _entry(
+        frontmatter={
+            "status": "open",
+            "symbol": "AAA.PL",
+            "context_at_open": _context_at_open(equity="2000"),
+        }
+    )
+    _upsert(tmp_path, (original,))
+    original_block = _context_block(_path(tmp_path).read_text(encoding="utf-8"))
+
+    refreshed = _entry(
+        frontmatter={
+            "status": "open",
+            "symbol": "AAA.PL",
+            "context_at_open": _context_at_open(equity="9999"),
+        }
+    )
+    _upsert(tmp_path, (refreshed,))
+
+    rendered = _path(tmp_path).read_text(encoding="utf-8")
+    assert _context_block(rendered) == original_block
+    assert "9999" not in rendered
+
+
+def test_context_at_close_is_written_once_when_absent_then_frozen(tmp_path: Path) -> None:
+    _upsert(tmp_path, (_entry(),))
+
+    first_close = {"hold_duration_days": 9, "pnl_pct": Decimal("10")}
+    _upsert(
+        tmp_path,
+        (_entry(frontmatter={"status": "closed", "context_at_close": first_close}),),
+    )
+    after_first = frontmatter.load(str(_path(tmp_path))).metadata["context_at_close"]
+
+    second_close = {"hold_duration_days": 99, "pnl_pct": Decimal("-50")}
+    _upsert(
+        tmp_path,
+        (_entry(frontmatter={"status": "closed", "context_at_close": second_close}),),
+    )
+    after_second = frontmatter.load(str(_path(tmp_path))).metadata["context_at_close"]
+
+    assert after_first == {"hold_duration_days": 9, "pnl_pct": "10"}
+    assert after_second == after_first
 
 
 def test_wraps_malformed_frontmatter_in_position_log_store_error(tmp_path: Path) -> None:
