@@ -83,17 +83,18 @@ rules:
 
   - id: ids.review-string-canonicalization
     message: |
-      Review whether this string canonicalization belongs in domain/application code.
+      Review whether this string canonicalization belongs here.
 
       Repeated trim/case normalization often signals a missing value object, enum
-      parser, or boundary conversion. Prefer normalizing once at the adapter edge
-      or inside a named domain type that owns the canonical representation.
+      parser, or boundary conversion. Prefer passing raw external values into a
+      named domain type or parser that owns the canonical representation.
     severity: INFO
     languages: [python]
     paths:
       include:
         - "**/src/ids/domain/**"
         - "**/src/ids/application/**"
+        - "**/src/ids/infrastructure/**"
       exclude:
         - "**/src/ids/domain/value_objects.py"
     pattern-either:
