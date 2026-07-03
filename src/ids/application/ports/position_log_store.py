@@ -7,7 +7,7 @@ from typing import Protocol
 from ids.domain.enums import PositionLogStatus
 from ids.domain.errors import IDSError
 from ids.domain.position_log_context import ContextAtClose, ContextAtOpen
-from ids.domain.value_objects import Symbol
+from ids.domain.value_objects import Price, Symbol
 
 
 @dataclass(frozen=True)
@@ -21,9 +21,9 @@ class PositionLogEntry:
     open_date: date
     symbol: Symbol
     status: PositionLogStatus
-    open_price: Decimal
+    open_price: Price
     close_date: date | None = None
-    close_price: Decimal | None = None
+    close_price: Price | None = None
     gross_pl_pln: Decimal | None = None
     context_at_open: ContextAtOpen | None = None
     context_at_close: ContextAtClose | None = None

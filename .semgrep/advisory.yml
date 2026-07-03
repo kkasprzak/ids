@@ -148,3 +148,42 @@ rules:
       - pattern: |
           def $FUNC(...) -> object:
             ...
+
+  - id: ids.prefer-value-object-over-primitive
+    message: |
+      Review whether this primitive should be a domain value object.
+
+      The domain defines value objects for these concepts (`Price` for per-instrument
+      prices, `Symbol` for instrument tickers). A bare `Decimal`/`str` here
+      re-introduces the primitive the value object exists to replace, and forces
+      producers to unwrap the value object at the boundary. When a DTO projects a
+      domain model, take each field's type from the corresponding model field — not
+      from test data.
+
+      Default action: FIX (use the value object). Accept only by citing the
+      ARCHITECTURE.md clause that positively permits the primitive (see the protocol
+      at the top of this file).
+    severity: INFO
+    languages: [python]
+    paths:
+      include:
+        - "**/src/ids/domain/**"
+        - "**/src/ids/application/**"
+      exclude:
+        - "**/src/ids/domain/value_objects.py"
+    pattern-either:
+      - patterns:
+          - pattern: "$FIELD: Decimal"
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: (?i).*price
+      - patterns:
+          - pattern: "$FIELD: Decimal | None"
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: (?i).*price
+      - patterns:
+          - pattern: "$FIELD: str"
+          - metavariable-regex:
+              metavariable: $FIELD
+              regex: ^symbol$

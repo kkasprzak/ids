@@ -10,7 +10,7 @@ import pytest
 from ids.application.ports import PositionLogEntry, PositionLogStoreError, UpsertResult
 from ids.domain.enums import AlertKind, PositionLogStatus
 from ids.domain.position_log_context import ContextAtClose, ContextAtOpen
-from ids.domain.value_objects import Symbol
+from ids.domain.value_objects import Price, Symbol
 from ids.infrastructure.adapters.markdown_position_log_store import MarkdownPositionLogStore
 
 pytestmark = pytest.mark.integration
@@ -41,9 +41,9 @@ def _entry(  # noqa: PLR0913
         open_date=open_date,
         symbol=Symbol(symbol),
         status=status,
-        open_price=open_price,
+        open_price=Price(open_price),
         close_date=close_date,
-        close_price=close_price,
+        close_price=Price(close_price) if close_price is not None else None,
         gross_pl_pln=gross_pl_pln,
         context_at_open=context_at_open,
         context_at_close=context_at_close,
