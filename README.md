@@ -35,10 +35,6 @@ uv run pre-commit install            # enable git hooks
 The HTML coverage report is written to `htmlcov/index.html`. Coverage is informational only;
 CI runs tests without a coverage gate.
 
-Semgrep blocker rules run in pre-commit and CI. Advisory rules are for the agent loop: run
-them after code changes, then either fix the findings or call out any deliberate exceptions
-in the handoff.
-
 ## Architecture
 
 Hexagonal (ports & adapters), four layers under `src/ids/`:
