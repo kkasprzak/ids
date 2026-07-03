@@ -6,17 +6,18 @@ from decimal import Decimal
 
 from ids.domain.enums import AlertKind, AlertSeverity
 from ids.domain.models import Alert
+from ids.domain.value_objects import Price, Symbol
 
 
 @dataclass(frozen=True)
 class PositionRow:
     """Pre-computed view of one open position, ready to render in the weekly table."""
 
-    symbol: str
+    symbol: Symbol
     open_date: date
     days_held: int
-    open_price: Decimal
-    market_price: Decimal
+    open_price: Price
+    market_price: Price
     pnl_pln: Decimal
     pnl_pct: Decimal
     has_alert: bool = False
@@ -28,7 +29,7 @@ class AlertView:
     severity: AlertSeverity
     recommended_action: str
     position_id: int | None = None
-    symbol: str | None = None
+    symbol: Symbol | None = None
     measured_pct: Decimal | None = None
 
     @classmethod
@@ -38,7 +39,7 @@ class AlertView:
             severity=alert.severity,
             recommended_action=alert.recommended_action,
             position_id=alert.position_id,
-            symbol=str(alert.symbol) if alert.symbol is not None else None,
+            symbol=alert.symbol,
             measured_pct=alert.measured_pct,
         )
 

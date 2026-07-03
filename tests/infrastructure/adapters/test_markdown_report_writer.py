@@ -9,6 +9,7 @@ from ids.application.ports import ReportWriterError
 from ids.application.viewmodels import AlertView, PositionRow, WeeklySnapshotView
 from ids.domain.enums import AlertKind, AlertSeverity
 from ids.domain.timezones import WARSAW
+from ids.domain.value_objects import Price, Symbol
 from ids.infrastructure.adapters.markdown_report_writer import MarkdownReportWriter
 
 pytestmark = pytest.mark.integration
@@ -26,20 +27,20 @@ def _view_with_rows(source_id: str = "xtb:fixture.xlsx") -> WeeklySnapshotView:
         open_positions_count=2,
         rows=(
             PositionRow(
-                symbol="AAA.PL",
+                symbol=Symbol("AAA.PL"),
                 open_date=date(2026, 1, 1),
                 days_held=10,
-                open_price=Decimal("100"),
-                market_price=Decimal("120"),
+                open_price=Price(Decimal("100")),
+                market_price=Price(Decimal("120")),
                 pnl_pln=Decimal("200"),
                 pnl_pct=Decimal("20.00"),
             ),
             PositionRow(
-                symbol="BBB.PL",
+                symbol=Symbol("BBB.PL"),
                 open_date=date(2026, 1, 2),
                 days_held=9,
-                open_price=Decimal("100"),
-                market_price=Decimal("110"),
+                open_price=Price(Decimal("100")),
+                market_price=Price(Decimal("110")),
                 pnl_pln=Decimal("100"),
                 pnl_pct=Decimal("10.00"),
             ),
@@ -71,21 +72,21 @@ def _view_with_alerts() -> WeeklySnapshotView:
         open_positions_count=2,
         rows=(
             PositionRow(
-                symbol="AAA.PL",
+                symbol=Symbol("AAA.PL"),
                 open_date=date(2026, 1, 1),
                 days_held=10,
-                open_price=Decimal("100"),
-                market_price=Decimal("94"),
+                open_price=Price(Decimal("100")),
+                market_price=Price(Decimal("94")),
                 pnl_pln=Decimal("-60"),
                 pnl_pct=Decimal("-6.00"),
                 has_alert=True,
             ),
             PositionRow(
-                symbol="BBB.PL",
+                symbol=Symbol("BBB.PL"),
                 open_date=date(2026, 1, 2),
                 days_held=9,
-                open_price=Decimal("100"),
-                market_price=Decimal("116"),
+                open_price=Price(Decimal("100")),
+                market_price=Price(Decimal("116")),
                 pnl_pln=Decimal("160"),
                 pnl_pct=Decimal("16.00"),
                 has_alert=True,
@@ -97,14 +98,14 @@ def _view_with_alerts() -> WeeklySnapshotView:
                 severity=AlertSeverity.WARNING,
                 recommended_action="Set a protective stop-loss in XTB.",
                 position_id=101,
-                symbol="AAA.PL",
+                symbol=Symbol("AAA.PL"),
             ),
             AlertView(
                 kind=AlertKind.STOP_LOSS_BREACH,
                 severity=AlertSeverity.ACTION_REQUIRED,
                 recommended_action="Close manually or set a protective stop in XTB.",
                 position_id=101,
-                symbol="AAA.PL",
+                symbol=Symbol("AAA.PL"),
                 measured_pct=Decimal("-6.00"),
             ),
             AlertView(
@@ -112,7 +113,7 @@ def _view_with_alerts() -> WeeklySnapshotView:
                 severity=AlertSeverity.WARNING,
                 recommended_action="Realize 50% of the position.",
                 position_id=102,
-                symbol="BBB.PL",
+                symbol=Symbol("BBB.PL"),
                 measured_pct=Decimal("16.00"),
             ),
             AlertView(

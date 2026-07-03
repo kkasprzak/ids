@@ -24,7 +24,7 @@ def test_alert_view_factory_maps_position_alert_fields() -> None:
     assert view.severity == alert.severity
     assert view.recommended_action == alert.recommended_action
     assert view.position_id == POSITION_ID
-    assert view.symbol == "PKN.PL"
+    assert view.symbol == Symbol("PKN.PL")
     assert view.measured_pct == Decimal("-6.50")
 
 
