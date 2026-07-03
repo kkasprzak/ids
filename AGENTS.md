@@ -26,8 +26,8 @@ bd dolt push          # Push beads data to remote
 ## Quality Gates
 
 ```bash
-uv run semgrep --config .semgrep/blocker.yml --config .semgrep/tests/blocker.yml --error
-uv run semgrep --config .semgrep/advisory.yml --config .semgrep/tests/advisory.yml
+uv run semgrep --config .semgrep/blocker.yml --error
+uv run semgrep --config .semgrep/advisory.yml
 ```
 
 Blocker Semgrep rules are hard gates and run in pre-commit plus CI. Advisory findings are

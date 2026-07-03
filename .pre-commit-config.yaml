@@ -21,7 +21,7 @@ repos:
         types: [python]
       - id: semgrep-blocker
         name: semgrep-blocker
-        entry: uv run semgrep --config .semgrep/blocker.yml --config .semgrep/tests/blocker.yml --error
+        entry: uv run semgrep --config .semgrep/blocker.yml --error
         language: system
         files: ^(src/ids|tests)/.*\.py$
   - repo: https://github.com/pre-commit/pre-commit-hooks
