@@ -56,19 +56,30 @@ rules:
       - pattern: |
           type $NAME = Mapping[str, object]
 
-  - id: ids.no-broad-exception
-    message: Avoid except Exception in domain/application code unless you are at a deliberate adapter boundary.
+  - id: ids.review-broad-exception-handler
+    message: |
+      Review whether this broad exception handler belongs in domain/application code.
+
+      Catching Exception here can hide missing error boundaries or domain-specific
+      failure modes. Prefer catching concrete exceptions, or move broad exception
+      translation to an adapter boundary.
     severity: INFO
     languages: [python]
     paths:
       include:
         - "**/src/ids/domain/**"
         - "**/src/ids/application/**"
-    pattern: |
-      try:
-        ...
-      except Exception:
-        ...
+    pattern-either:
+      - pattern: |
+          try:
+            ...
+          except Exception:
+            ...
+      - pattern: |
+          try:
+            ...
+          except Exception as $EXC:
+            ...
 
   - id: ids.review-bare-object-contract
     message: |
