@@ -50,18 +50,7 @@ bd close <id>         # Complete work
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
 
-## Quality Gates
-
-```bash
-uv run semgrep --config .semgrep/blocker.yml --error
-uv run semgrep --config .semgrep/advisory.yml
-```
-
-Blocker Semgrep rules are hard gates and run in pre-commit plus CI. Advisory findings are
-for the current agent loop: review them after a code change and either fix them or explain
-why a specific finding is acceptable.
-
-## Build & Test
+## Build & Quality Gates
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management and Python 3.12+.
 
@@ -79,7 +68,10 @@ uv run lint-imports           # Architecture contracts (importlinter)
 uv run ids --help             # Run the CLI entrypoint
 ```
 
-`basedpyright` is the strict typing gate and fails on `Any` leaks.
+Tests, lint, formatting checks, import-linter, basedpyright, and Semgrep blocker rules are
+hard quality gates. `basedpyright` is the strict typing gate and fails on `Any` leaks.
+Semgrep advisory findings are not blocking, but agents must review findings after a code
+change and either fix them or explain why a specific finding is acceptable.
 
 Pre-commit hooks are configured; install with `uv run pre-commit install`.
 
