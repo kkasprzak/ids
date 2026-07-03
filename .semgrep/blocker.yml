@@ -14,7 +14,7 @@ rules:
         ...
 
   - id: ids.no-utcnow
-    message: Avoid datetime.utcnow(); use timezone-aware datetimes instead.
+    message: Do not use datetime.utcnow(). Use a timezone-aware clock; pass explicit now into domain/application code instead of reading time there.
     severity: ERROR
     languages: [python]
     paths:
