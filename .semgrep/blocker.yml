@@ -32,7 +32,7 @@ rules:
       - pattern: datetime.utcnow(...)
 
   - id: ids.tests.no-sleep
-    message: Avoid time.sleep() in tests; use deterministic synchronization or a frozen clock.
+    message: Do not use time.sleep() in tests. Use deterministic synchronization, polling with a timeout, or a frozen clock.
     severity: ERROR
     languages: [python]
     paths:
