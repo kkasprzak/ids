@@ -1,39 +1,10 @@
-# Agent Instructions
+# Project Instructions for AI Agents
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
+This file provides instructions and context for AI coding agents working on this project.
 
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
+## Codex Notes
 
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
-
-## Semgrep Feedback
-
-```bash
-uv run semgrep --config .semgrep/blocker.yml --error
-uv run semgrep --config .semgrep/advisory.yml
-```
-
-Review advisory findings after code changes. Fix findings in changed files or explain why
-they are acceptable.
-
-## Non-Interactive Shell Commands
+### Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
 
@@ -56,11 +27,6 @@ cp -rf source dest          # NOT: cp -r source dest
 - `ssh` - use `-o BatchMode=yes` to fail instead of prompting
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
-
-## Conventions & Patterns
-
-- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
-- **Per-bead workflow**: ensure master is up-to-date → new branch per bead → work → open PR → CI must be green before the bead is considered done.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ccf33ec3 -->
 ## Beads Issue Tracker
@@ -110,3 +76,44 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+## Build & Quality Gates
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management and Python 3.12+.
+
+```bash
+uv sync                       # Install dependencies (incl. dev group)
+uv run pytest                 # Run test suite
+uv run pytest -n auto         # Run tests in parallel (pytest-xdist)
+uv run pytest --cov=ids       # Run with coverage
+uv run ruff check .           # Lint
+uv run ruff format .          # Format
+uv run basedpyright           # Type-check, including Any leakage gate
+uv run semgrep --config .semgrep/blocker.yml --error
+uv run semgrep --config .semgrep/advisory.yml         # Advisory Semgrep feedback
+uv run lint-imports           # Architecture contracts (importlinter)
+uv run ids --help             # Run the CLI entrypoint
+```
+
+Review Semgrep advisory findings after code changes; fix findings in changed files or
+explain why they are acceptable.
+
+Pre-commit hooks are configured; install with `uv run pre-commit install`.
+
+## Architecture Overview
+
+**Investment Decision System (IDS)** — IKZE portfolio automation CLI. Reads XTB XLSX exports, persists portfolio snapshots, evaluates compliance rules, and renders Markdown reports.
+
+Hexagonal (ports & adapters), four layers under `src/ids/`:
+
+- **`domain/`** — pure business logic; no I/O library imports.
+- **`application/`** — use-case orchestration, ports, and report view models.
+- **`infrastructure/`** — concrete I/O adapters (XLSX, JSONL, Markdown, templates).
+- **`presentation/`** — user-facing delivery adapters, currently the `typer` CLI.
+
+`outputs/snapshots/<as_of>.jsonl` is the canonical time-series substrate; reports are views over snapshot history. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design record and [`TECH_STACK.md`](TECH_STACK.md) for the library list.
+
+## Conventions & Patterns
+
+- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
+- **Per-bead workflow**: ensure master is up-to-date → new branch per bead → work → open PR → CI must be green before the bead is considered done.
