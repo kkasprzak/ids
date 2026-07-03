@@ -50,6 +50,16 @@ bd close <id>         # Complete work
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
 
+## Quality Gates
+
+```bash
+uv run semgrep --config .semgrep/blocker.yml --error
+uv run semgrep --config .semgrep/advisory.yml
+```
+
+Blocker Semgrep rules are hard gates and run in pre-commit plus CI. Advisory findings are
+for the current agent loop: review them after a code change and either fix them or explain
+why a specific finding is acceptable.
 
 ## Build & Test
 
@@ -63,6 +73,8 @@ uv run pytest --cov=ids       # Run with coverage
 uv run ruff check .           # Lint
 uv run ruff format .          # Format
 uv run basedpyright           # Type-check, including Any leakage gate
+uv run semgrep --config .semgrep/blocker.yml --error  # Hard Semgrep rules
+uv run semgrep --config .semgrep/advisory.yml         # Advisory Semgrep feedback
 uv run lint-imports           # Architecture contracts (importlinter)
 uv run ids --help             # Run the CLI entrypoint
 ```
