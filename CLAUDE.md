@@ -62,16 +62,15 @@ uv run pytest --cov=ids       # Run with coverage
 uv run ruff check .           # Lint
 uv run ruff format .          # Format
 uv run basedpyright           # Type-check, including Any leakage gate
-uv run semgrep --config .semgrep/blocker.yml --error  # Hard Semgrep rules
+uv run semgrep --config .semgrep/blocker.yml --error
 uv run semgrep --config .semgrep/advisory.yml         # Advisory Semgrep feedback
 uv run lint-imports           # Architecture contracts (importlinter)
 uv run ids --help             # Run the CLI entrypoint
 ```
 
-Tests, lint, formatting checks, import-linter, basedpyright, and Semgrep blocker rules are
-hard quality gates. `basedpyright` is the strict typing gate and fails on `Any` leaks.
-Semgrep advisory findings are not blocking, but agents must review findings after a code
-change and either fix them or explain why a specific finding is acceptable.
+`basedpyright` is the strict typing gate and fails on `Any` leaks. Review Semgrep advisory
+findings after code changes; fix findings in changed files or explain why they are
+acceptable.
 
 Pre-commit hooks are configured; install with `uv run pre-commit install`.
 
