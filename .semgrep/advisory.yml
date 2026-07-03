@@ -81,6 +81,24 @@ rules:
           except Exception as $EXC:
             ...
 
+  - id: ids.review-string-canonicalization
+    message: |
+      Review whether this string canonicalization belongs in domain/application code.
+
+      Repeated trim/case normalization often signals a missing value object, enum
+      parser, or boundary conversion. Prefer normalizing once at the adapter edge
+      or inside a named domain type that owns the canonical representation.
+    severity: INFO
+    languages: [python]
+    paths:
+      include:
+        - "**/src/ids/domain/**"
+        - "**/src/ids/application/**"
+    pattern-either:
+      - pattern: $VALUE.strip().upper()
+      - pattern: $VALUE.strip().lower()
+      - pattern: $VALUE.casefold()
+
   - id: ids.review-bare-object-contract
     message: |
       Review whether this bare `object` belongs in a domain/application contract.
