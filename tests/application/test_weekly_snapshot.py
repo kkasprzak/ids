@@ -50,9 +50,9 @@ def test_single_position_basic_fields_propagated(
     assert view.equity_pln == snapshot.account.equity_pln
     assert view.cash_pln == snapshot.account.balance_pln
     assert view.open_positions_count == 1
-    assert _first_row(view).symbol == position.symbol
-    assert _first_row(view).open_price == position.open_price
-    assert _first_row(view).market_price == position.market_price
+    assert _first_row(view).symbol == "PKN.PL"
+    assert _first_row(view).open_price == Decimal("99")
+    assert _first_row(view).market_price == Decimal("111")
     assert _first_row(view).open_date == position.open_time.date()
 
 
@@ -125,7 +125,7 @@ def test_rows_sorted_by_pnl_pct_descending(
 
     view = _weekly_view(snapshot)
 
-    assert tuple(str(row.symbol) for row in view.rows) == ("HIGH.PL", "MID.PL", "LOW.PL")
+    assert tuple(row.symbol for row in view.rows) == ("HIGH.PL", "MID.PL", "LOW.PL")
 
 
 def test_sort_tie_broken_by_symbol_alpha(
@@ -142,7 +142,7 @@ def test_sort_tie_broken_by_symbol_alpha(
 
     view = _weekly_view(snapshot)
 
-    assert tuple(str(row.symbol) for row in view.rows) == ("AAA.PL", "ZZZ.PL")
+    assert tuple(row.symbol for row in view.rows) == ("AAA.PL", "ZZZ.PL")
 
 
 def test_source_id_propagated_to_view(
@@ -220,6 +220,6 @@ def test_rows_flagged_only_for_positions_with_position_alerts(
 
     view = _weekly_view(snapshot)
 
-    row_flags = {str(row.symbol): row.has_alert for row in view.rows}
+    row_flags = {row.symbol: row.has_alert for row in view.rows}
     assert row_flags["FLAGGED.PL"] is True
     assert row_flags["OK.PL"] is False

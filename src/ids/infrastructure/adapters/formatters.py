@@ -1,7 +1,5 @@
 from decimal import Decimal
 
-from ids.domain.value_objects import Price
-
 NBSP = "\u00a0"
 MINUS = "\u2212"
 MIN_DECIMALS = 2
@@ -29,9 +27,8 @@ def format_pct_signed(value: Decimal) -> str:
     return f"{MINUS}{abs(value):.2f}%"
 
 
-def format_price(value: Price | Decimal) -> str:
-    amount = value.value if isinstance(value, Price) else value
-    integer, fraction = f"{amount:.4f}".split(".")
+def format_price(value: Decimal) -> str:
+    integer, fraction = f"{value:.4f}".split(".")
     trimmed = fraction.rstrip("0")
     if len(trimmed) < MIN_DECIMALS:
         trimmed = trimmed.ljust(MIN_DECIMALS, "0")
