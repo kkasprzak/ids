@@ -27,11 +27,17 @@ uv run pytest --cov=ids --cov-report=term-missing --cov-report=html
 uv run ruff check .                  # lint
 uv run ruff format .                 # format
 uv run basedpyright                  # type-check, including Any leakage gate
+uv run semgrep --config .semgrep/blocker.yml --config .semgrep/tests/blocker.yml --error
+uv run semgrep --config .semgrep/advisory.yml --config .semgrep/tests/advisory.yml
 uv run pre-commit install            # enable git hooks
 ```
 
 The HTML coverage report is written to `htmlcov/index.html`. Coverage is informational only;
 CI runs tests without a coverage gate.
+
+Semgrep blocker rules run in pre-commit and CI. Advisory rules are for the agent loop: run
+them after code changes, then either fix the findings or call out any deliberate exceptions
+in the handoff.
 
 ## Architecture
 

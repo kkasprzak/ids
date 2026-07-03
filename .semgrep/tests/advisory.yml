@@ -1,0 +1,23 @@
+rules:
+  - id: ids.tests.no-inline-ignores
+    message: Avoid inline ignore comments in tests unless you add a short explanation for why the suppression is necessary.
+    severity: INFO
+    languages: [python]
+    paths:
+      include:
+        - "**/tests/**"
+    pattern-regex: '#\s*(pyright:\s*ignore|type:\s*ignore|noqa)'
+
+  - id: ids.tests.no-broad-helper-dict
+    message: Avoid dict[str, object] in stable test helpers; prefer a typed helper, builder, or dataclass when the payload shape is fixed.
+    severity: INFO
+    languages: [python]
+    paths:
+      include:
+        - "**/tests/**"
+    pattern-either:
+      - pattern: |
+          def $F(...) -> dict[str, object]:
+            ...
+      - pattern: |
+          $FIELD: dict[str, object]

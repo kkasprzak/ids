@@ -16,5 +16,6 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check
       - run: uv run basedpyright
+      - run: uv run semgrep --config .semgrep/blocker.yml --config .semgrep/tests/blocker.yml --error
       - run: uv run pytest -m unit
       - run: uv run pytest

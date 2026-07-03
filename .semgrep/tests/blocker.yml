@@ -1,0 +1,11 @@
+rules:
+  - id: ids.tests.no-sleep
+    message: Avoid time.sleep() in tests; use deterministic synchronization or a frozen clock.
+    severity: ERROR
+    languages: [python]
+    paths:
+      include:
+        - "**/tests/**"
+    pattern-either:
+      - pattern: time.sleep()
+      - pattern: time.sleep(...)

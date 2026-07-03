@@ -23,6 +23,17 @@ bd close <id>         # Complete work
 bd dolt push          # Push beads data to remote
 ```
 
+## Quality Gates
+
+```bash
+uv run semgrep --config .semgrep/blocker.yml --config .semgrep/tests/blocker.yml --error
+uv run semgrep --config .semgrep/advisory.yml --config .semgrep/tests/advisory.yml
+```
+
+Blocker Semgrep rules are hard gates and run in pre-commit plus CI. Advisory findings are
+for the current agent loop: review them after a code change and either fix them or explain
+why a specific finding is acceptable.
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.

@@ -1,0 +1,28 @@
+rules:
+  - id: ids.no-broad-contract-type
+    message: Avoid dict[str, object] or Mapping[str, object] in domain/application contracts. Use a named alias or dataclass boundary.
+    severity: INFO
+    languages: [python]
+    paths:
+      include:
+        - "**/src/ids/domain/**"
+        - "**/src/ids/application/**"
+    pattern-either:
+      - pattern: |
+          $FIELD: dict[str, object]
+      - pattern: |
+          $FIELD: Mapping[str, object]
+
+  - id: ids.no-broad-exception
+    message: Avoid except Exception in domain/application code unless you are at a deliberate adapter boundary.
+    severity: INFO
+    languages: [python]
+    paths:
+      include:
+        - "**/src/ids/domain/**"
+        - "**/src/ids/application/**"
+    pattern: |
+      try:
+        ...
+      except Exception:
+        ...

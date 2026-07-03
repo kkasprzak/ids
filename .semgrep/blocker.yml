@@ -1,0 +1,26 @@
+rules:
+  - id: ids.no-base-exception
+    message: Catch concrete exceptions instead of BaseException in IDS code.
+    severity: ERROR
+    languages: [python]
+    paths:
+      include:
+        - "**/src/ids/**"
+        - "**/tests/**"
+    pattern: |
+      try:
+        ...
+      except BaseException:
+        ...
+
+  - id: ids.no-utcnow
+    message: Avoid datetime.utcnow(); use timezone-aware datetimes instead.
+    severity: ERROR
+    languages: [python]
+    paths:
+      include:
+        - "**/src/ids/**"
+        - "**/tests/**"
+    pattern-either:
+      - pattern: datetime.utcnow()
+      - pattern: datetime.utcnow(...)
