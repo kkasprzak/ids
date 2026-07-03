@@ -1,6 +1,13 @@
 rules:
-  - id: ids.no-broad-contract-type
-    message: Avoid dict[str, object] or Mapping[str, object] in domain/application contracts. Use a named alias or dataclass boundary.
+  - id: ids.review-broad-mapping-contract
+    message: |
+      Review whether this broad mapping belongs in a domain/application contract.
+
+      `dict[str, object]` and `Mapping[str, object]` hide the payload shape from the
+      type checker and often let external YAML/JSON/frontmatter data leak inward.
+      Prefer a named alias, dataclass, value object, TypedDict, or explicit union. If
+      this is intentional boundary data, keep it at the adapter edge or explain why
+      it belongs here.
     severity: INFO
     languages: [python]
     paths:
@@ -11,7 +18,43 @@ rules:
       - pattern: |
           $FIELD: dict[str, object]
       - pattern: |
+          $FIELD: dict[str, object] = $VALUE
+      - pattern: |
           $FIELD: Mapping[str, object]
+      - pattern: |
+          $FIELD: Mapping[str, object] = $VALUE
+      - pattern: |
+          def $FUNC(..., $ARG: dict[str, object], ...):
+            ...
+      - pattern: |
+          async def $FUNC(..., $ARG: dict[str, object], ...):
+            ...
+      - pattern: |
+          def $FUNC(...) -> dict[str, object]:
+            ...
+      - pattern: |
+          async def $FUNC(...) -> dict[str, object]:
+            ...
+      - pattern: |
+          def $FUNC(..., $ARG: Mapping[str, object], ...):
+            ...
+      - pattern: |
+          async def $FUNC(..., $ARG: Mapping[str, object], ...):
+            ...
+      - pattern: |
+          def $FUNC(...) -> Mapping[str, object]:
+            ...
+      - pattern: |
+          async def $FUNC(...) -> Mapping[str, object]:
+            ...
+      - pattern: |
+          $NAME: TypeAlias = dict[str, object]
+      - pattern: |
+          $NAME: TypeAlias = Mapping[str, object]
+      - pattern: |
+          type $NAME = dict[str, object]
+      - pattern: |
+          type $NAME = Mapping[str, object]
 
   - id: ids.no-broad-exception
     message: Avoid except Exception in domain/application code unless you are at a deliberate adapter boundary.
