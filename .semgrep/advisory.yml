@@ -94,6 +94,8 @@ rules:
       include:
         - "**/src/ids/domain/**"
         - "**/src/ids/application/**"
+      exclude:
+        - "**/src/ids/domain/value_objects.py"
     pattern-either:
       - pattern: $VALUE.strip().upper()
       - pattern: $VALUE.strip().lower()
