@@ -1,17 +1,23 @@
 rules:
   - id: ids.no-base-exception
-    message: Catch concrete exceptions instead of BaseException in IDS code.
+    message: Do not catch BaseException. It also catches process-control exceptions such as KeyboardInterrupt and SystemExit. Catch a concrete Exception subclass instead.
     severity: ERROR
     languages: [python]
     paths:
       include:
         - "**/src/ids/**"
         - "**/tests/**"
-    pattern: |
-      try:
-        ...
-      except BaseException:
-        ...
+    pattern-either:
+      - pattern: |
+          try:
+            ...
+          except BaseException:
+            ...
+      - pattern: |
+          try:
+            ...
+          except BaseException as $EXC:
+            ...
 
   - id: ids.no-utcnow
     message: Do not use datetime.utcnow(). Use a timezone-aware clock; pass explicit now into domain/application code instead of reading time there.
