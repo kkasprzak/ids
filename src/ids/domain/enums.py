@@ -14,6 +14,11 @@ class AlertSeverity(StrEnum):
     ACTION_REQUIRED = "ACTION_REQUIRED"
 
 
+class PositionLogStatus(StrEnum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
 class AlertKind(StrEnum):
     MISSING_STOP_LOSS = "MISSING_STOP_LOSS"
     STOP_LOSS_BREACH = "STOP_LOSS_BREACH"
