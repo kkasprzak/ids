@@ -93,12 +93,14 @@ Every I/O concern is a port. Application code depends only on the port; infrastr
 | `ids.application.ports.PortfolioLoader` | `ids.infrastructure.adapters.XTBPortfolioLoader` | Loads the most recent portfolio snapshot from the configured source. |
 | `ids.application.ports.SnapshotStore` | `ids.infrastructure.adapters.JSONLSnapshotStore` | Persists and retrieves the historical series of `PortfolioSnapshot` records. |
 | `ids.application.ports.ReportWriter` | `ids.infrastructure.adapters.MarkdownReportWriter` | Renders a view-model into a Markdown report file using `jinja2` templates. |
+| `ids.application.ports.PositionLogStore` | `ids.infrastructure.adapters.MarkdownPositionLogStore` | Upserts per-position Markdown logs — system-owned YAML frontmatter, user-owned Markdown body. |
 | `ConfigLoader` | `YAMLConfigLoader` | Reads `inputs/config.yaml` and returns `BenchmarkConfig`. |
 | `InstrumentMetadataStore` | `YAMLInstrumentStore` | Reads and writes `inputs/instruments.yaml`. |
-| `PositionLogStore` | `MarkdownPositionLogStore` | Reads and writes per-position Markdown files with frontmatter. |
 | `ChartWriter` | `MatplotlibChartWriter` | Writes PNG chart files. |
 
 `PortfolioSnapshot` is the canonical domain record of a portfolio state at a point in time (`as_of_date`). It is persisted via `SnapshotStore` and read back by every report-generation flow; the Markdown weekly/monthly reports are views over the snapshot history, not the source of truth. The adapter that loads a snapshot stamps a `source_id` field (for example `xtb:<filename>`) so application/reporting code can render provenance without coupling the domain to the source format.
+
+The **position log** is a derived, per-position Markdown view over snapshot history. The `sync_position_logs` use case projects each snapshot's open and closed positions into `PositionLogStore` entries, and the `ids position-log sync` command drives it. The store owns the YAML frontmatter (system facts, refreshed on every run) while the user owns the Markdown body (rationale, review notes) — the snapshot store remains the source of truth for portfolio facts, the log store for portfolio rationale.
 
 ## File ownership
 
