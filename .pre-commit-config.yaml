@@ -13,6 +13,12 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+      - id: basedpyright
+        name: basedpyright
+        entry: uv run basedpyright
+        language: system
+        pass_filenames: false
+        types: [python]
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
