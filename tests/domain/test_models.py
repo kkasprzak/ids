@@ -67,6 +67,46 @@ def test_closed_position_requires_positive_close_price(
         make_closed_position(close_price=close_price)
 
 
+@pytest.mark.parametrize(
+    ("type_", "market_price", "expected_pct"),
+    [
+        (PositionType.BUY, Decimal("120"), Decimal("20")),
+        (PositionType.BUY, Decimal("94"), Decimal("-6")),
+        (PositionType.SELL, Decimal("120"), Decimal("-20")),
+        (PositionType.SELL, Decimal("94"), Decimal("6")),
+    ],
+)
+def test_position_pnl_pct_is_signed_relative_to_open_price(
+    make_position: Callable[..., Position],
+    type_: PositionType,
+    market_price: Decimal,
+    expected_pct: Decimal,
+) -> None:
+    position = make_position(type=type_, open_price=Decimal("100"), market_price=market_price)
+
+    assert position.pnl_pct() == expected_pct
+
+
+@pytest.mark.parametrize(
+    ("type_", "close_price", "expected_pct"),
+    [
+        (PositionType.BUY, Decimal("120"), Decimal("20")),
+        (PositionType.BUY, Decimal("94"), Decimal("-6")),
+        (PositionType.SELL, Decimal("120"), Decimal("-20")),
+        (PositionType.SELL, Decimal("94"), Decimal("6")),
+    ],
+)
+def test_closed_position_pnl_pct_is_signed_relative_to_open_price(
+    make_closed_position: Callable[..., ClosedPosition],
+    type_: PositionType,
+    close_price: Decimal,
+    expected_pct: Decimal,
+) -> None:
+    closed = make_closed_position(type=type_, open_price=Decimal("100"), close_price=close_price)
+
+    assert closed.pnl_pct() == expected_pct
+
+
 def test_alert_classifies_position_and_portfolio_scope() -> None:
     position_alert = Alert.missing_stop_loss(position_id=42, symbol=Symbol("PKN.PL"))
     portfolio_alert = Alert.cash_reserve_below_minimum(measured_pct=Decimal("9.99"))

@@ -1,0 +1,43 @@
+rules:
+  - id: ids.no-base-exception
+    message: Do not catch BaseException. It also catches process-control exceptions such as KeyboardInterrupt and SystemExit. Catch a concrete Exception subclass instead.
+    severity: ERROR
+    languages: [python]
+    paths:
+      include:
+        - "**/src/ids/**"
+        - "**/tests/**"
+    pattern-either:
+      - pattern: |
+          try:
+            ...
+          except BaseException:
+            ...
+      - pattern: |
+          try:
+            ...
+          except BaseException as $EXC:
+            ...
+
+  - id: ids.no-utcnow
+    message: Do not use datetime.utcnow(). Use a timezone-aware clock; pass explicit now into domain/application code instead of reading time there.
+    severity: ERROR
+    languages: [python]
+    paths:
+      include:
+        - "**/src/ids/**"
+        - "**/tests/**"
+    pattern-either:
+      - pattern: datetime.utcnow()
+      - pattern: datetime.utcnow(...)
+
+  - id: ids.tests.no-sleep
+    message: Do not use time.sleep() in tests. Use deterministic synchronization, polling with a timeout, or a frozen clock.
+    severity: ERROR
+    languages: [python]
+    paths:
+      include:
+        - "**/tests/**"
+    pattern-either:
+      - pattern: time.sleep()
+      - pattern: time.sleep(...)

@@ -13,6 +13,17 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+      - id: basedpyright
+        name: basedpyright
+        entry: uv run basedpyright
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: semgrep-blocker
+        name: semgrep-blocker
+        entry: uv run semgrep --config .semgrep/blocker.yml --error
+        language: system
+        files: ^(src/ids|tests)/.*\.py$
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:

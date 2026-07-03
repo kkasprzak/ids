@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -24,40 +25,60 @@ log = logging.getLogger(__name__)
 _OPEN_SHEET_PREFIX = "OPEN POSITION "
 _CLOSED_SHEET_NAME = "CLOSED POSITION HISTORY"
 
-type ColumnSchema = dict[str, frozenset[str]]
 type RawCellValue = object
 type RawDataRow = tuple[RawCellValue, ...]
 type ColumnIndexes = dict[str, int]
 
-# Logical field → accepted label aliases. Normalized before matching (strip + casefold).
+
+@dataclass(frozen=True)
+class _XTBLabel:
+    """Canonical XTB workbook label for case-insensitive, whitespace-tolerant matching."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "value", " ".join(self.value.split()).lower())
+
+    def __str__(self) -> str:
+        return self.value
+
+
+type ColumnSchema = dict[str, frozenset[_XTBLabel]]
+
+
+def _labels(*values: str) -> frozenset[_XTBLabel]:
+    return frozenset(_XTBLabel(value) for value in values)
+
+
+# Logical field → accepted label aliases.
 # All XTB adapter complexity stays here; domain models never see these strings.
 _POSITION_COLUMN_SCHEMA: ColumnSchema = {
-    "position_id": frozenset({"Position"}),
-    "symbol": frozenset({"Symbol"}),
-    "type": frozenset({"Type"}),
-    "volume": frozenset({"Volume"}),
-    "open_time": frozenset({"Open time"}),
-    "open_price": frozenset({"Open price"}),
-    "market_price": frozenset({"Market price"}),
-    "purchase_value": frozenset({"Purchase value"}),
-    "sl": frozenset({"SL"}),
-    "gross_pl": frozenset({"Gross P/L", "Gross P&L"}),
+    "position_id": _labels("Position"),
+    "symbol": _labels("Symbol"),
+    "type": _labels("Type"),
+    "volume": _labels("Volume"),
+    "open_time": _labels("Open time"),
+    "open_price": _labels("Open price"),
+    "market_price": _labels("Market price"),
+    "purchase_value": _labels("Purchase value"),
+    "sl": _labels("SL"),
+    "gross_pl": _labels("Gross P/L", "Gross P&L"),
 }
 _CLOSED_POSITION_COLUMN_SCHEMA: ColumnSchema = {
-    "position_id": frozenset({"Position"}),
-    "symbol": frozenset({"Symbol"}),
-    "type": frozenset({"Type"}),
-    "volume": frozenset({"Volume"}),
-    "open_time": frozenset({"Open time"}),
-    "open_price": frozenset({"Open price"}),
-    "close_time": frozenset({"Close time"}),
-    "close_price": frozenset({"Close price"}),
-    "purchase_value": frozenset({"Purchase value"}),
-    "gross_pl": frozenset({"Gross P/L", "Gross P&L"}),
+    "position_id": _labels("Position"),
+    "symbol": _labels("Symbol"),
+    "type": _labels("Type"),
+    "volume": _labels("Volume"),
+    "open_time": _labels("Open time"),
+    "open_price": _labels("Open price"),
+    "close_time": _labels("Close time"),
+    "close_price": _labels("Close price"),
+    "purchase_value": _labels("Purchase value"),
+    "gross_pl": _labels("Gross P/L", "Gross P&L"),
 }
 _ACCOUNT_COLUMN_SCHEMA: ColumnSchema = {
-    "balance": frozenset({"Balance"}),
-    "equity": frozenset({"Equity"}),
+    "balance": _labels("Balance"),
+    "equity": _labels("Equity"),
 }
 
 # Bounded scan caps: high enough to survive XTB layout changes, low enough to
@@ -67,11 +88,6 @@ _ACCOUNT_HEADER_SCAN_ROWS = 15
 _POSITION_HEADER_SCAN_ROWS = 25
 # Real fixture has the closed-position header at row 11; 15 gives headroom.
 _CLOSED_POSITION_HEADER_SCAN_ROWS = 15
-
-
-def _normalize_label(label: str) -> str:
-    """Strip, collapse internal whitespace, and casefold for alias matching."""
-    return " ".join(label.split()).casefold()
 
 
 class XTBPortfolioLoader(PortfolioLoader):
@@ -327,9 +343,9 @@ class XTBPortfolioLoader(PortfolioLoader):
         if _CLOSED_SHEET_NAME in workbook.sheetnames:
             return workbook[_CLOSED_SHEET_NAME]
         # 2. Normalized match (case-insensitive, whitespace-tolerant).
-        target = _normalize_label(_CLOSED_SHEET_NAME)
+        target = _XTBLabel(_CLOSED_SHEET_NAME)
         for name in workbook.sheetnames:
-            if _normalize_label(name) == target:
+            if _XTBLabel(name) == target:
                 log.info("Closed-position sheet found via normalized match: %r", name)
                 return workbook[name]
         # 3. Semantic fallback by column structure.
@@ -442,12 +458,12 @@ def _sheet_has_position_table(
 ) -> bool:
     required_count = len(_POSITION_COLUMN_SCHEMA)
     for row in sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True):
-        present = {_normalize_label(str(cell)) for cell in row if isinstance(cell, str)}
+        present = {_XTBLabel(str(cell)) for cell in row if isinstance(cell, str)}
         # Count distinct logical fields covered (each field matches if any alias is present)
         covered = sum(
             1
             for aliases in _POSITION_COLUMN_SCHEMA.values()
-            if any(_normalize_label(a) in present for a in aliases)
+            if any(alias in present for alias in aliases)
         )
         if covered == required_count:
             return True
@@ -459,11 +475,11 @@ def _sheet_has_closed_position_table(
 ) -> bool:
     required_count = len(_CLOSED_POSITION_COLUMN_SCHEMA)
     for row in sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True):
-        present = {_normalize_label(str(cell)) for cell in row if isinstance(cell, str)}
+        present = {_XTBLabel(str(cell)) for cell in row if isinstance(cell, str)}
         covered = sum(
             1
             for aliases in _CLOSED_POSITION_COLUMN_SCHEMA.values()
-            if any(_normalize_label(a) in present for a in aliases)
+            if any(alias in present for alias in aliases)
         )
         if covered == required_count:
             return True
@@ -476,27 +492,23 @@ def _find_labelled_row(
     schema: ColumnSchema,
     max_scan_rows: int,
 ) -> tuple[int, ColumnIndexes]:
-    normalized_schema = {
-        logical: {_normalize_label(a) for a in aliases} for logical, aliases in schema.items()
-    }
     for row_idx, row in enumerate(
         sheet.iter_rows(min_row=1, max_row=max_scan_rows, values_only=True), start=1
     ):
         norm_row = {
-            _normalize_label(str(cell)): idx
-            for idx, cell in enumerate(row)
-            if isinstance(cell, str)
+            _XTBLabel(str(cell)): idx for idx, cell in enumerate(row) if isinstance(cell, str)
         }
         columns: ColumnIndexes = {}
-        for logical, norm_aliases in normalized_schema.items():
-            for alias in norm_aliases:
+        for logical, aliases in schema.items():
+            for alias in aliases:
                 if alias in norm_row:
                     columns[logical] = norm_row[alias]
                     break
         if len(columns) == len(schema):
             return row_idx, columns
     required_desc = [
-        f"{logical} (accepts: {', '.join(sorted(aliases))})" for logical, aliases in schema.items()
+        f"{logical} (accepts: {', '.join(sorted(str(alias) for alias in aliases))})"
+        for logical, aliases in schema.items()
     ]
     raise PortfolioMalformedError(
         f"Could not find row with all required columns in first {max_scan_rows} rows. "

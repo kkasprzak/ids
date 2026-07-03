@@ -27,6 +27,7 @@ dev = [
     "pre-commit>=3.7",
     "import-linter>=2.11",
     "basedpyright>=1.39.6",
+    "semgrep>=1.168.0",
 ]
 
 [build-system]

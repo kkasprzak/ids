@@ -37,3 +37,20 @@ def test_price_keeps_positive_decimal_value() -> None:
 def test_price_rejects_non_positive_values(raw: Decimal) -> None:
     with pytest.raises(ValueError, match="Price must be positive"):
         Price(raw)
+
+
+@pytest.mark.parametrize(
+    "minuend, subtrahend, expected",
+    [
+        (Decimal("110"), Decimal("100"), Decimal("10")),
+        (Decimal("90"), Decimal("100"), Decimal("-10")),
+        (Decimal("100"), Decimal("100"), Decimal("0")),
+    ],
+)
+def test_price_subtraction_returns_signed_decimal_delta(
+    minuend: Decimal, subtrahend: Decimal, expected: Decimal
+) -> None:
+    delta = Price(minuend) - Price(subtrahend)
+
+    assert delta == expected
+    assert isinstance(delta, Decimal)

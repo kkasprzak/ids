@@ -1,8 +1,5 @@
-from collections.abc import Iterable, Mapping
-from datetime import date, datetime
-from decimal import Decimal
+from collections.abc import Iterable
 from pathlib import Path
-from typing import cast
 
 import frontmatter  # pyright: ignore[reportMissingTypeStubs]
 import yaml
@@ -15,11 +12,20 @@ from ids.application.ports.position_log_store import (
     PositionLogStoreError,
     UpsertResult,
 )
+from ids.domain.position_log_context import ContextAtClose, ContextAtOpen
 
 _SCAFFOLDING_SECTIONS = (
     "## Open rationale",
     "## Close rationale",
     "## Review history",
+)
+
+# Moment-of-decision context structs are written once and then frozen. The
+# adapter refuses to overwrite them on refresh: whatever value already lives in
+# the file wins over any incoming value for these keys.
+_IMMUTABLE_FRONTMATTER_KEYS = (
+    "context_at_open",
+    "context_at_close",
 )
 
 
@@ -45,12 +51,7 @@ class MarkdownPositionLogStore(PositionLogStore):
                 if path.exists():
                     previous_status = self._refresh_existing(path, entry)
                     refreshed_count += 1
-                    new_status = entry.frontmatter.get("status")
-                    if (
-                        previous_status is not None
-                        and new_status is not None
-                        and previous_status != new_status
-                    ):
+                    if previous_status is not None and previous_status != entry.status.value:
                         status_transitioned_count += 1
                 else:
                     self._write_new(path, entry)
@@ -73,38 +74,65 @@ class MarkdownPositionLogStore(PositionLogStore):
         return self._root / f"{entry.open_date.isoformat()}_{entry.symbol}.md"
 
     def _write_new(self, path: Path, entry: PositionLogEntry) -> None:
-        post = Post(_new_content(), self._handler, **_normalized_frontmatter(entry.frontmatter))
+        post = Post(_new_content(), self._handler, **_frontmatter(entry))
         path.write_text(frontmatter.dumps(post, handler=self._handler) + "\n", encoding="utf-8")
 
     def _refresh_existing(self, path: Path, entry: PositionLogEntry) -> object:
         post = frontmatter.load(str(path), handler=self._handler)
-        previous_status = _metadata_value(post.metadata, "status")
-        post.metadata = _normalized_frontmatter(entry.frontmatter)
+        previous_status = post.metadata.get("status")
+        post.metadata = _refreshed_metadata(entry, post.metadata)
         post.content = _with_missing_sections(post.content)
         path.write_text(frontmatter.dumps(post, handler=self._handler) + "\n", encoding="utf-8")
         return previous_status
 
 
-def _metadata_value(metadata: dict[str, object], key: str) -> object:
-    return metadata.get(key)
+def _refreshed_metadata(entry: PositionLogEntry, existing: dict[str, object]) -> dict[str, object]:
+    metadata = _frontmatter(entry)
+    for key in _IMMUTABLE_FRONTMATTER_KEYS:
+        if key in existing:
+            metadata[key] = existing[key]
+    return metadata
 
 
-def _normalized_frontmatter(frontmatter: dict[str, object]) -> dict[str, object]:
-    return {key: _normalized_value(value) for key, value in frontmatter.items()}
+def _frontmatter(entry: PositionLogEntry) -> dict[str, object]:
+    """Translate a typed entry into deterministically ordered YAML frontmatter."""
+    metadata: dict[str, object] = {
+        "status": entry.status.value,
+        "symbol": str(entry.symbol),
+        "open_date": entry.open_date,
+        "open_price": str(entry.open_price),
+    }
+    if entry.close_date is not None:
+        metadata["close_date"] = entry.close_date
+    if entry.close_price is not None:
+        metadata["close_price"] = str(entry.close_price)
+    if entry.gross_pl_pln is not None:
+        metadata["gross_pl"] = str(entry.gross_pl_pln)
+    if entry.context_at_open is not None:
+        metadata["context_at_open"] = _context_at_open_frontmatter(entry.context_at_open)
+    if entry.context_at_close is not None:
+        metadata["context_at_close"] = _context_at_close_frontmatter(entry.context_at_close)
+    return metadata
 
 
-def _normalized_value(value: object) -> object:
-    if isinstance(value, Decimal):
-        return str(value)
-    if isinstance(value, Mapping):
-        mapping = cast(Mapping[object, object], value)
-        return {str(key): _normalized_value(item) for key, item in mapping.items()}
-    if isinstance(value, list | tuple):
-        items = cast(Iterable[object], value)
-        return [_normalized_value(item) for item in items]
-    if isinstance(value, str | int | float | bool | date | datetime) or value is None:
-        return value
-    return str(value)
+def _context_at_open_frontmatter(context: ContextAtOpen) -> dict[str, object]:
+    return {
+        "portfolio_equity_pln": str(context.portfolio_equity_pln),
+        "cash_reserve_pct": str(context.cash_reserve_pct),
+        "open_positions_count": context.open_positions_count,
+        "this_position_pct_of_portfolio": str(context.this_position_pct_of_portfolio),
+        "strategy_rules_satisfied": [rule.value for rule in context.strategy_rules_satisfied],
+        "strategy_rules_violated": [rule.value for rule in context.strategy_rules_violated],
+    }
+
+
+def _context_at_close_frontmatter(context: ContextAtClose) -> dict[str, object]:
+    return {
+        "hold_duration_days": context.hold_duration_days,
+        "pnl_pct": str(context.pnl_pct),
+        "strategy_rules_satisfied": [rule.value for rule in context.strategy_rules_satisfied],
+        "strategy_rules_violated": [rule.value for rule in context.strategy_rules_violated],
+    }
 
 
 def _new_content() -> str:

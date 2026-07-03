@@ -2,7 +2,6 @@
 
 from decimal import Decimal
 
-from ids.domain.enums import PositionType
 from ids.domain.models import Alert, PortfolioSnapshot, Position
 from ids.domain.strategy_rules import (
     MIN_CASH_RESERVE_PCT,
@@ -33,7 +32,7 @@ def _position_alerts(position: Position) -> tuple[Alert, ...]:
     if position.sl is None:
         alerts.append(Alert.missing_stop_loss(position_id=position.id, symbol=position.symbol))
 
-    pnl_pct = _position_pnl_pct(position)
+    pnl_pct = position.pnl_pct()
 
     if pnl_pct < STOP_LOSS_PCT:
         alerts.append(
@@ -54,14 +53,6 @@ def _position_alerts(position: Position) -> tuple[Alert, ...]:
         )
 
     return tuple(alerts)
-
-
-def _position_pnl_pct(position: Position) -> Decimal:
-    price_delta = position.market_price.value - position.open_price.value
-    if position.type is PositionType.SELL:
-        price_delta = -price_delta
-
-    return price_delta / position.open_price.value * HUNDRED
 
 
 def _pct(numerator: Decimal, denominator: Decimal) -> Decimal:

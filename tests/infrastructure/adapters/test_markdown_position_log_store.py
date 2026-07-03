@@ -2,12 +2,15 @@ from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 import frontmatter  # pyright: ignore[reportMissingTypeStubs]
 import pytest
 
 from ids.application.ports import PositionLogEntry, PositionLogStoreError, UpsertResult
-from ids.domain.value_objects import Symbol
+from ids.domain.enums import AlertKind, PositionLogStatus
+from ids.domain.position_log_context import ContextAtClose, ContextAtOpen
+from ids.domain.value_objects import Price, Symbol
 from ids.infrastructure.adapters.markdown_position_log_store import MarkdownPositionLogStore
 
 pytestmark = pytest.mark.integration
@@ -22,22 +25,28 @@ def _path(tmp_path: Path, open_date: date = date(2026, 1, 1), symbol: str = "AAA
     return tmp_path / "outputs" / "position_logs" / f"{open_date.isoformat()}_{symbol}.md"
 
 
-def _entry(
+def _entry(  # noqa: PLR0913
     *,
     open_date: date = date(2026, 1, 1),
     symbol: str = "AAA.PL",
-    frontmatter: dict[str, object] | None = None,
+    status: PositionLogStatus = PositionLogStatus.OPEN,
+    open_price: Decimal = Decimal("100"),
+    close_date: date | None = None,
+    close_price: Decimal | None = None,
+    gross_pl_pln: Decimal | None = None,
+    context_at_open: ContextAtOpen | None = None,
+    context_at_close: ContextAtClose | None = None,
 ) -> PositionLogEntry:
     return PositionLogEntry(
         open_date=open_date,
         symbol=Symbol(symbol),
-        frontmatter=frontmatter
-        or {
-            "status": "open",
-            "symbol": symbol,
-            "open_date": open_date,
-            "open_price": Decimal("100"),
-        },
+        status=status,
+        open_price=Price(open_price),
+        close_date=close_date,
+        close_price=Price(close_price) if close_price is not None else None,
+        gross_pl_pln=gross_pl_pln,
+        context_at_open=context_at_open,
+        context_at_close=context_at_close,
     )
 
 
@@ -64,14 +73,10 @@ def test_new_open_position_creates_file_with_frontmatter_and_scaffolding(tmp_pat
 
 def test_new_closed_position_writes_closed_frontmatter(tmp_path: Path) -> None:
     entry = _entry(
-        frontmatter={
-            "status": "closed",
-            "symbol": "AAA.PL",
-            "open_date": date(2026, 1, 1),
-            "close_date": date(2026, 1, 10),
-            "close_price": Decimal("110"),
-            "gross_pl": Decimal("100"),
-        },
+        status=PositionLogStatus.CLOSED,
+        close_date=date(2026, 1, 10),
+        close_price=Decimal("110"),
+        gross_pl_pln=Decimal("100"),
     )
 
     _upsert(tmp_path, (entry,))
@@ -92,9 +97,7 @@ def test_existing_user_prose_remains_present_when_metadata_is_refreshed(tmp_path
         f"## Open rationale\n{user_prose}\n\n## Review history\n- first note\n",
         encoding="utf-8",
     )
-    entry = _entry(
-        frontmatter={"status": "open", "symbol": "AAA.PL", "open_date": date(2026, 1, 1)}
-    )
+    entry = _entry(status=PositionLogStatus.OPEN)
 
     _upsert(tmp_path, (entry,))
 
@@ -109,9 +112,7 @@ def test_status_transition_from_open_to_closed_is_counted(tmp_path: Path) -> Non
     path.write_text(
         "---\nstatus: open\n---\n\n## Open rationale\nExisting note\n", encoding="utf-8"
     )
-    entry = _entry(
-        frontmatter={"status": "closed", "symbol": "AAA.PL", "open_date": date(2026, 1, 1)}
-    )
+    entry = _entry(status=PositionLogStatus.CLOSED)
 
     result = _upsert(tmp_path, (entry,))
 
@@ -122,7 +123,7 @@ def test_status_transition_from_open_to_closed_is_counted(tmp_path: Path) -> Non
 def test_refresh_with_same_status_is_not_counted_as_transition(tmp_path: Path) -> None:
     _upsert(tmp_path, (_entry(),))
 
-    result = _upsert(tmp_path, (_entry(frontmatter={"status": "open", "symbol": "AAA.PL"}),))
+    result = _upsert(tmp_path, (_entry(status=PositionLogStatus.OPEN),))
 
     assert result == UpsertResult(created_count=0, refreshed_count=1, status_transitioned_count=0)
 
@@ -134,7 +135,7 @@ def test_refresh_without_previous_status_is_not_counted_as_transition(tmp_path: 
         "---\nsymbol: AAA.PL\n---\n\n## Open rationale\nExisting note\n", encoding="utf-8"
     )
 
-    result = _upsert(tmp_path, (_entry(frontmatter={"status": "open", "symbol": "AAA.PL"}),))
+    result = _upsert(tmp_path, (_entry(status=PositionLogStatus.OPEN),))
 
     assert result == UpsertResult(created_count=0, refreshed_count=1, status_transitioned_count=0)
 
@@ -155,14 +156,7 @@ def test_multiple_positions_same_symbol_different_dates_create_multiple_files(
 
 
 def test_frontmatter_key_order_is_deterministic(tmp_path: Path) -> None:
-    entry = _entry(
-        frontmatter={
-            "status": "open",
-            "symbol": "AAA.PL",
-            "open_date": date(2026, 1, 1),
-            "open_price": Decimal("100"),
-        },
-    )
+    entry = _entry(open_price=Decimal("100"))
 
     _upsert(tmp_path, (entry,))
 
@@ -210,6 +204,85 @@ def test_wraps_filesystem_write_errors_in_position_log_store_error(
 
     with pytest.raises(PositionLogStoreError, match="Failed to upsert position logs"):
         store.upsert_metadata((_entry(),))
+
+
+def _context_at_open(*, equity: str) -> ContextAtOpen:
+    return ContextAtOpen(
+        portfolio_equity_pln=Decimal(equity),
+        cash_reserve_pct=Decimal("25"),
+        open_positions_count=3,
+        this_position_pct_of_portfolio=Decimal("12.5"),
+        strategy_rules_satisfied=(AlertKind.MISSING_STOP_LOSS, AlertKind.STOP_LOSS_BREACH),
+        strategy_rules_violated=(AlertKind.CASH_RESERVE_BELOW_MINIMUM,),
+    )
+
+
+def _context_block(rendered: str) -> str:
+    start = rendered.index("context_at_open:")
+    end = rendered.index("\n---", start)
+    return rendered[start:end]
+
+
+def test_enum_rule_ids_serialize_as_plain_strings(tmp_path: Path) -> None:
+    entry = _entry(context_at_open=_context_at_open(equity="2000"))
+
+    _upsert(tmp_path, (entry,))
+
+    rendered = _path(tmp_path).read_text(encoding="utf-8")
+    assert "!!python" not in rendered
+    metadata = frontmatter.load(str(_path(tmp_path))).metadata
+    context = cast("dict[str, object]", metadata["context_at_open"])
+    assert context["strategy_rules_satisfied"] == ["MISSING_STOP_LOSS", "STOP_LOSS_BREACH"]
+    assert context["strategy_rules_violated"] == ["CASH_RESERVE_BELOW_MINIMUM"]
+
+
+def test_context_at_open_is_immutable_across_refresh_with_different_state(tmp_path: Path) -> None:
+    original = _entry(context_at_open=_context_at_open(equity="2000"))
+    _upsert(tmp_path, (original,))
+    original_block = _context_block(_path(tmp_path).read_text(encoding="utf-8"))
+
+    refreshed = _entry(context_at_open=_context_at_open(equity="9999"))
+    _upsert(tmp_path, (refreshed,))
+
+    rendered = _path(tmp_path).read_text(encoding="utf-8")
+    assert _context_block(rendered) == original_block
+    assert "9999" not in rendered
+
+
+def test_context_at_close_is_written_once_when_absent_then_frozen(tmp_path: Path) -> None:
+    _upsert(tmp_path, (_entry(),))
+
+    first_close = ContextAtClose(
+        hold_duration_days=9,
+        pnl_pct=Decimal("10"),
+        strategy_rules_satisfied=(),
+        strategy_rules_violated=(),
+    )
+    _upsert(
+        tmp_path,
+        (_entry(status=PositionLogStatus.CLOSED, context_at_close=first_close),),
+    )
+    after_first = frontmatter.load(str(_path(tmp_path))).metadata["context_at_close"]
+
+    second_close = ContextAtClose(
+        hold_duration_days=99,
+        pnl_pct=Decimal("-50"),
+        strategy_rules_satisfied=(),
+        strategy_rules_violated=(),
+    )
+    _upsert(
+        tmp_path,
+        (_entry(status=PositionLogStatus.CLOSED, context_at_close=second_close),),
+    )
+    after_second = frontmatter.load(str(_path(tmp_path))).metadata["context_at_close"]
+
+    assert after_first == {
+        "hold_duration_days": 9,
+        "pnl_pct": "10",
+        "strategy_rules_satisfied": [],
+        "strategy_rules_violated": [],
+    }
+    assert after_second == after_first
 
 
 def test_wraps_malformed_frontmatter_in_position_log_store_error(tmp_path: Path) -> None:

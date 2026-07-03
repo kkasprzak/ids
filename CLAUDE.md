@@ -36,6 +36,7 @@ bd close <id>         # Complete work
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
+   bd dolt push
    git push
    git status  # MUST show "up to date with origin"
    ```
@@ -50,8 +51,7 @@ bd close <id>         # Complete work
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
 
-
-## Build & Test
+## Build & Quality Gates
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management and Python 3.12+.
 
@@ -63,11 +63,15 @@ uv run pytest --cov=ids       # Run with coverage
 uv run ruff check .           # Lint
 uv run ruff format .          # Format
 uv run basedpyright           # Type-check, including Any leakage gate
+uv run semgrep --config .semgrep/blocker.yml --error
+uv run semgrep --config .semgrep/advisory.yml         # Advisory Semgrep feedback
 uv run lint-imports           # Architecture contracts (importlinter)
 uv run ids --help             # Run the CLI entrypoint
 ```
 
-`basedpyright` is the strict typing gate and fails on `Any` leaks.
+After code changes, review Semgrep advisory findings and handle each per the protocol
+documented at the top of [`.semgrep/advisory.yml`](.semgrep/advisory.yml) (default: fix;
+accept only by citing the governing `ARCHITECTURE.md` clause).
 
 Pre-commit hooks are configured; install with `uv run pre-commit install`.
 
@@ -75,11 +79,12 @@ Pre-commit hooks are configured; install with `uv run pre-commit install`.
 
 **Investment Decision System (IDS)** — IKZE portfolio automation CLI. Reads XTB XLSX exports, persists portfolio snapshots, evaluates compliance rules, and renders Markdown reports.
 
-Hexagonal (ports & adapters), three layers under `src/ids/`:
+Hexagonal (ports & adapters), four layers under `src/ids/`:
 
 - **`domain/`** — pure business logic; no I/O library imports.
-- **`adapters/`** — concrete I/O (XLSX, JSONL, YAML, Markdown, PNG).
-- **`cli/`** — thin `typer` orchestration.
+- **`application/`** — use-case orchestration, ports, and report view models.
+- **`infrastructure/`** — concrete I/O adapters (XLSX, JSONL, Markdown, templates).
+- **`presentation/`** — user-facing delivery adapters, currently the `typer` CLI.
 
 `outputs/snapshots/<as_of>.jsonl` is the canonical time-series substrate; reports are views over snapshot history. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design record and [`TECH_STACK.md`](TECH_STACK.md) for the library list.
 

@@ -31,5 +31,9 @@ class Price:
         if self.value <= 0:
             raise ValueError(f"Price must be positive (got {self.value})")
 
+    def __sub__(self, other: "Price") -> Decimal:
+        """Return the signed price change; a delta is not itself a Price."""
+        return self.value - other.value
+
     def __str__(self) -> str:
         return str(self.value)

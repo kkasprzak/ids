@@ -27,6 +27,8 @@ uv run pytest --cov=ids --cov-report=term-missing --cov-report=html
 uv run ruff check .                  # lint
 uv run ruff format .                 # format
 uv run basedpyright                  # type-check, including Any leakage gate
+uv run semgrep --config .semgrep/blocker.yml --error
+uv run semgrep --config .semgrep/advisory.yml
 uv run pre-commit install            # enable git hooks
 ```
 
