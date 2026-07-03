@@ -68,9 +68,8 @@ uv run lint-imports           # Architecture contracts (importlinter)
 uv run ids --help             # Run the CLI entrypoint
 ```
 
-`basedpyright` is the strict typing gate and fails on `Any` leaks. Review Semgrep advisory
-findings after code changes; fix findings in changed files or explain why they are
-acceptable.
+Review Semgrep advisory findings after code changes; fix findings in changed files or
+explain why they are acceptable.
 
 Pre-commit hooks are configured; install with `uv run pre-commit install`.
 
