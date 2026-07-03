@@ -27,6 +27,30 @@ rules:
       except Exception:
         ...
 
+  - id: ids.review-bare-object-contract
+    message: |
+      Review whether this bare `object` belongs in a domain/application contract.
+
+      It weakens the contract and often hides a missing domain concept or leaked
+      boundary payload. Prefer a named type, value object, dataclass, enum,
+      Protocol, or explicit union. If this is intentional boundary data, keep it at
+      the adapter edge or explain why it belongs here.
+    severity: INFO
+    languages: [python]
+    paths:
+      include:
+        - "**/src/ids/domain/**"
+        - "**/src/ids/application/**"
+    pattern-either:
+      - pattern: |
+          $NAME: object
+      - pattern: |
+          def $FUNC(..., $ARG: object, ...):
+            ...
+      - pattern: |
+          def $FUNC(...) -> object:
+            ...
+
   - id: ids.tests.no-inline-ignores
     message: Avoid inline ignore comments in tests unless you add a short explanation for why the suppression is necessary.
     severity: INFO
