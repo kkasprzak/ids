@@ -1,3 +1,17 @@
+# Advisory findings are WORK TRIGGERS, not judgment prompts. Each finding is a lamp
+# saying "investigate this against our architecture." For every finding in changed
+# files, follow this protocol — do not shortcut it:
+#
+#   1. Assume it is a real defect until proven compliant. The burden of proof is
+#      "show it is consistent with our architecture", never "show it is broken".
+#   2. Investigate against the source of truth: open ARCHITECTURE.md (and decision
+#      records) and find the clause governing that layer/boundary. Do not reason from
+#      a general recollection of how hexagonal architecture "usually" works.
+#   3. Default verdict is FIX. Mark a finding acceptable ONLY when you can cite the
+#      explicit ARCHITECTURE.md clause that positively permits it. "No rule forbids
+#      it" is NOT sufficient grounds for acceptance.
+#   4. Cite that clause in your report. An "acceptable" verdict without a citation is
+#      invalid — it keeps the reasoning auditable and blocks status-quo rationalizing.
 rules:
   - id: ids.review-broad-mapping-contract
     message: |
@@ -5,9 +19,10 @@ rules:
 
       `dict[str, object]` and `Mapping[str, object]` hide the payload shape from the
       type checker and often let external YAML/JSON/frontmatter data leak inward.
-      Prefer a named alias, dataclass, value object, TypedDict, or explicit union. If
-      this is intentional boundary data, keep it at the adapter edge or explain why
-      it belongs here.
+      Prefer a named alias, dataclass, value object, TypedDict, or explicit union.
+
+      Default action: FIX. Accept only by citing the ARCHITECTURE.md clause that
+      positively permits it (see the protocol at the top of this file).
     severity: INFO
     languages: [python]
     paths:
@@ -63,6 +78,9 @@ rules:
       Catching Exception here can hide missing error boundaries or domain-specific
       failure modes. Prefer catching concrete exceptions, or move broad exception
       translation to an adapter boundary.
+
+      Default action: FIX. Accept only by citing the ARCHITECTURE.md clause that
+      positively permits it (see the protocol at the top of this file).
     severity: INFO
     languages: [python]
     paths:
@@ -88,6 +106,9 @@ rules:
       Repeated trim/case normalization often signals a missing value object, enum
       parser, or boundary conversion. Prefer passing raw external values into a
       named domain type or parser that owns the canonical representation.
+
+      Default action: FIX. Accept only by citing the ARCHITECTURE.md clause that
+      positively permits it (see the protocol at the top of this file).
     severity: INFO
     languages: [python]
     paths:
@@ -108,8 +129,10 @@ rules:
 
       It weakens the contract and often hides a missing domain concept or leaked
       boundary payload. Prefer a named type, value object, dataclass, enum,
-      Protocol, or explicit union. If this is intentional boundary data, keep it at
-      the adapter edge or explain why it belongs here.
+      Protocol, or explicit union.
+
+      Default action: FIX. Accept only by citing the ARCHITECTURE.md clause that
+      positively permits it (see the protocol at the top of this file).
     severity: INFO
     languages: [python]
     paths:

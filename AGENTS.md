@@ -95,8 +95,9 @@ uv run lint-imports           # Architecture contracts (importlinter)
 uv run ids --help             # Run the CLI entrypoint
 ```
 
-Review Semgrep advisory findings after code changes; fix findings in changed files or
-explain why they are acceptable.
+After code changes, review Semgrep advisory findings and handle each per the protocol
+documented at the top of [`.semgrep/advisory.yml`](.semgrep/advisory.yml) (default: fix;
+accept only by citing the governing `ARCHITECTURE.md` clause).
 
 Pre-commit hooks are configured; install with `uv run pre-commit install`.
 
