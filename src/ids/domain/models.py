@@ -7,6 +7,8 @@ from decimal import Decimal
 from ids.domain.enums import AlertKind, AlertSeverity, PositionType
 from ids.domain.value_objects import Price, Symbol
 
+_HUNDRED = Decimal("100")
+
 
 @dataclass(frozen=True)
 class AccountSummary:
@@ -31,6 +33,10 @@ class Position:
     gross_pl_pln: Decimal
     sl: Decimal | None
 
+    def pnl_pct(self) -> Decimal:
+        """Signed unrealized P&L percentage relative to the open price."""
+        return _pnl_pct(self.open_price, self.market_price, self.type)
+
 
 @dataclass(frozen=True)
 class ClosedPosition:
@@ -44,6 +50,10 @@ class ClosedPosition:
     close_price: Price
     purchase_value_pln: Decimal
     gross_pl_pln: Decimal
+
+    def pnl_pct(self) -> Decimal:
+        """Signed realized P&L percentage relative to the open price."""
+        return _pnl_pct(self.open_price, self.close_price, self.type)
 
 
 @dataclass(frozen=True)
@@ -115,6 +125,15 @@ class Alert:
 
     def is_portfolio_alert(self) -> bool:
         return self.position_id is None
+
+
+def _pnl_pct(open_price: Price, current_price: Price, position_type: PositionType) -> Decimal:
+    """Signed profit/loss percentage of a position relative to its open price."""
+    price_delta = current_price - open_price
+    if position_type is PositionType.SELL:
+        price_delta = -price_delta
+
+    return price_delta / open_price.value * _HUNDRED
 
 
 def _require_positive_decimal(model_name: str, field_name: str, value: Decimal) -> None:

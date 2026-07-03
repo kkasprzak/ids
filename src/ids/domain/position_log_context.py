@@ -11,7 +11,7 @@ new rule logic is introduced here, only invoked at new moments in time.
 from dataclasses import dataclass
 from decimal import Decimal
 
-from ids.domain.compliance_alerts import evaluate_compliance_alerts, position_pnl_pct
+from ids.domain.compliance_alerts import evaluate_compliance_alerts
 from ids.domain.enums import AlertKind
 from ids.domain.models import ClosedPosition, PortfolioSnapshot, Position
 from ids.domain.strategy_rules import PROFIT_TAKE_PCT, STOP_LOSS_PCT
@@ -73,9 +73,7 @@ def context_at_close(
     compliance is judged against the realized P&L of the closed position itself,
     not against either snapshot's open positions.
     """
-    pnl_pct = position_pnl_pct(
-        closed_position.open_price, closed_position.close_price, closed_position.type
-    )
+    pnl_pct = closed_position.pnl_pct()
     hold_duration_days = (closed_position.close_time - closed_position.open_time).days
     satisfied, violated = _close_rule_compliance(pnl_pct)
     return ContextAtClose(

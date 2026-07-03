@@ -2,27 +2,14 @@
 
 from decimal import Decimal
 
-from ids.domain.enums import PositionType
 from ids.domain.models import Alert, PortfolioSnapshot, Position
 from ids.domain.strategy_rules import (
     MIN_CASH_RESERVE_PCT,
     PROFIT_TAKE_PCT,
     STOP_LOSS_PCT,
 )
-from ids.domain.value_objects import Price
 
 HUNDRED = Decimal("100")
-
-
-def position_pnl_pct(
-    open_price: Price, current_price: Price, position_type: PositionType
-) -> Decimal:
-    """Signed profit/loss percentage of a position relative to its open price."""
-    price_delta = current_price - open_price
-    if position_type is PositionType.SELL:
-        price_delta = -price_delta
-
-    return price_delta / open_price.value * HUNDRED
 
 
 def evaluate_compliance_alerts(snapshot: PortfolioSnapshot) -> tuple[Alert, ...]:
@@ -45,7 +32,7 @@ def _position_alerts(position: Position) -> tuple[Alert, ...]:
     if position.sl is None:
         alerts.append(Alert.missing_stop_loss(position_id=position.id, symbol=position.symbol))
 
-    pnl_pct = _position_pnl_pct(position)
+    pnl_pct = position.pnl_pct()
 
     if pnl_pct < STOP_LOSS_PCT:
         alerts.append(
@@ -66,10 +53,6 @@ def _position_alerts(position: Position) -> tuple[Alert, ...]:
         )
 
     return tuple(alerts)
-
-
-def _position_pnl_pct(position: Position) -> Decimal:
-    return position_pnl_pct(position.open_price, position.market_price, position.type)
 
 
 def _pct(numerator: Decimal, denominator: Decimal) -> Decimal:
