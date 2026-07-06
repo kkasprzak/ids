@@ -86,6 +86,62 @@ def test_single_open_position_parsed_correctly(tmp_path: Path) -> None:
     assert position.sl is None
 
 
+def test_partial_fill_closed_rows_aggregate_into_one_position(tmp_path: Path) -> None:
+    # XTB reports a position closed in tranches as one row per fill, all sharing
+    # the same Position id. They must fold into a single logical closed position.
+    input_dir = tmp_path / "inputs"
+    position_id = 2498119260
+    _write_export(
+        input_dir,
+        closed_positions=[
+            {
+                "Position": position_id,
+                "Symbol": "KRU.PL",
+                "Volume": Decimal("0.4184"),
+                "Open price": Decimal("476.0"),
+                "Close price": Decimal("396.4"),
+                "Open time": datetime.fromisoformat("2026-04-08T09:00:00"),
+                "Close time": datetime.fromisoformat("2026-06-02T13:31:07"),
+                "Purchase value": Decimal("199.16"),
+                "Gross P/L": Decimal("-33.31"),
+            },
+            {
+                "Position": position_id,
+                "Symbol": "KRU.PL",
+                "Volume": Decimal("0.6824"),
+                "Open price": Decimal("476.0"),
+                "Close price": Decimal("396.4"),
+                "Open time": datetime.fromisoformat("2026-04-08T09:00:00"),
+                "Close time": datetime.fromisoformat("2026-06-02T13:31:08"),
+                "Purchase value": Decimal("324.82"),
+                "Gross P/L": Decimal("-54.32"),
+            },
+            {
+                "Position": position_id,
+                "Symbol": "KRU.PL",
+                "Volume": Decimal("1.0"),
+                "Open price": Decimal("476.0"),
+                "Close price": Decimal("396.4"),
+                "Open time": datetime.fromisoformat("2026-04-08T09:00:00"),
+                "Close time": datetime.fromisoformat("2026-06-02T13:31:09"),
+                "Purchase value": Decimal("476.0"),
+                "Gross P/L": Decimal("-79.6"),
+            },
+        ],
+    )
+
+    closed = _loader(input_dir).load_latest().closed_positions
+
+    assert len(closed) == 1
+    position = closed[0]
+    assert position.id == position_id
+    assert position.volume == Decimal("2.1008")
+    assert position.gross_pl_pln == Decimal("-167.23")
+    assert position.purchase_value_pln == Decimal("999.98")
+    latest_close = datetime.fromisoformat("2026-06-02T13:31:09").replace(tzinfo=WARSAW)
+    assert position.close_time == latest_close
+
+
 def test_symbols_are_normalized_to_canonical_form(tmp_path: Path) -> None:
     input_dir = tmp_path / "inputs"
     _write_export(

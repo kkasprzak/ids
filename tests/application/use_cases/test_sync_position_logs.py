@@ -69,6 +69,7 @@ def test_open_positions_project_to_open_entries(
 
     assert log_store.received == [
         PositionLogEntry(
+            id=position.id,
             open_date=position.open_time.date(),
             symbol=Symbol("PKN.PL"),
             status=PositionLogStatus.OPEN,
@@ -94,6 +95,7 @@ def test_closed_positions_project_to_closed_entries(
 
     assert log_store.received == [
         PositionLogEntry(
+            id=closed.id,
             open_date=closed.open_time.date(),
             symbol=Symbol("CDR.PL"),
             status=PositionLogStatus.CLOSED,
