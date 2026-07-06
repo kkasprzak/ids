@@ -18,6 +18,7 @@ class PositionLogEntry:
     frontmatter serialization; the application layer never shapes YAML.
     """
 
+    id: int
     open_date: date
     symbol: Symbol
     status: PositionLogStatus

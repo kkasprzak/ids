@@ -27,6 +27,7 @@ def _path(tmp_path: Path, open_date: date = date(2026, 1, 1), symbol: str = "AAA
 
 def _entry(  # noqa: PLR0913
     *,
+    id: int = 1,
     open_date: date = date(2026, 1, 1),
     symbol: str = "AAA.PL",
     status: PositionLogStatus = PositionLogStatus.OPEN,
@@ -38,6 +39,7 @@ def _entry(  # noqa: PLR0913
     context_at_close: ContextAtClose | None = None,
 ) -> PositionLogEntry:
     return PositionLogEntry(
+        id=id,
         open_date=open_date,
         symbol=Symbol(symbol),
         status=status,
@@ -155,6 +157,30 @@ def test_multiple_positions_same_symbol_different_dates_create_multiple_files(
     assert _path(tmp_path, date(2026, 1, 2), "AAA.PL").is_file()
 
 
+def test_frontmatter_records_xtb_position_id(tmp_path: Path) -> None:
+    position_id = 2498119260
+    _upsert(tmp_path, (_entry(id=position_id),))
+
+    post = frontmatter.load(str(_path(tmp_path)))
+    assert post.metadata["id"] == position_id
+
+
+def test_cross_id_collision_on_same_open_date_and_symbol_keeps_both_logs(tmp_path: Path) -> None:
+    # Two distinct positions bought the same day on the same symbol must not
+    # overwrite each other; the later one is disambiguated by position id.
+    entries = (
+        _entry(id=111, open_date=date(2026, 1, 1), symbol="AAA.PL"),
+        _entry(id=222, open_date=date(2026, 1, 1), symbol="AAA.PL"),
+    )
+
+    result = _upsert(tmp_path, entries)
+
+    root = tmp_path / "outputs" / "position_logs"
+    assert result.created_count == EXPECTED_CREATED_COUNT
+    assert (root / "2026-01-01_AAA.PL.md").is_file()
+    assert (root / "2026-01-01_AAA.PL_222.md").is_file()
+
+
 def test_frontmatter_key_order_is_deterministic(tmp_path: Path) -> None:
     entry = _entry(open_price=Decimal("100"))
 
@@ -162,7 +188,7 @@ def test_frontmatter_key_order_is_deterministic(tmp_path: Path) -> None:
 
     rendered = _path(tmp_path).read_text(encoding="utf-8")
     assert rendered.startswith(
-        "---\nstatus: open\nsymbol: AAA.PL\nopen_date: 2026-01-01\nopen_price: '100'\n"
+        "---\nid: 1\nstatus: open\nsymbol: AAA.PL\nopen_date: 2026-01-01\nopen_price: '100'\n"
     )
 
 

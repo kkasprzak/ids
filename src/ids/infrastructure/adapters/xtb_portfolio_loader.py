@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -391,7 +391,7 @@ class XTBPortfolioLoader(PortfolioLoader):
             if not isinstance(first, int | float):
                 break
             closed_positions.append(self._row_to_closed_position(row, columns, row_idx))
-        return closed_positions
+        return _aggregate_closed_by_id(closed_positions)
 
     def _row_to_closed_position(
         self, row: RawDataRow, columns: ColumnIndexes, row_idx: int
@@ -484,6 +484,30 @@ def _sheet_has_closed_position_table(
         if covered == required_count:
             return True
     return False
+
+
+def _aggregate_closed_by_id(positions: list[ClosedPosition]) -> list[ClosedPosition]:
+    """Fold partial-fill rows sharing one XTB position id into one closed position.
+
+    XTB reports a position closed in tranches as one row per fill — same id, open
+    time and prices, differing only in volume, gross P/L and close time. Summing
+    the fills reconstructs the single logical position; without this each fill
+    would overwrite the last in the position log, losing realized P/L.
+    """
+    aggregated: dict[int, ClosedPosition] = {}
+    for position in positions:
+        existing = aggregated.get(position.id)
+        if existing is None:
+            aggregated[position.id] = position
+            continue
+        aggregated[position.id] = replace(
+            existing,
+            volume=existing.volume + position.volume,
+            gross_pl_pln=existing.gross_pl_pln + position.gross_pl_pln,
+            purchase_value_pln=existing.purchase_value_pln + position.purchase_value_pln,
+            close_time=max(existing.close_time, position.close_time),
+        )
+    return list(aggregated.values())
 
 
 def _find_labelled_row(

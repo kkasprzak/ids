@@ -44,6 +44,7 @@ def sync_position_logs(
 
 def _open_entry(position: Position) -> PositionLogEntry:
     return PositionLogEntry(
+        id=position.id,
         open_date=position.open_time.date(),
         symbol=position.symbol,
         status=PositionLogStatus.OPEN,
@@ -53,6 +54,7 @@ def _open_entry(position: Position) -> PositionLogEntry:
 
 def _closed_entry(position: ClosedPosition) -> PositionLogEntry:
     return PositionLogEntry(
+        id=position.id,
         open_date=position.open_time.date(),
         symbol=position.symbol,
         status=PositionLogStatus.CLOSED,

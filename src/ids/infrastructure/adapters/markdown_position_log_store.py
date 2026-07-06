@@ -46,8 +46,10 @@ class MarkdownPositionLogStore(PositionLogStore):
         status_transitioned_count = 0
         try:
             self._root.mkdir(parents=True, exist_ok=True)
+            resolved: set[Path] = set()
             for entry in entries:
-                path = self._path_for(entry)
+                path = self._path_for(entry, resolved)
+                resolved.add(path)
                 if path.exists():
                     previous_status = self._refresh_existing(path, entry)
                     refreshed_count += 1
@@ -70,8 +72,13 @@ class MarkdownPositionLogStore(PositionLogStore):
                 f"Failed to upsert position logs in `{self._root}`: {exc}"
             ) from exc
 
-    def _path_for(self, entry: PositionLogEntry) -> Path:
-        return self._root / f"{entry.open_date.isoformat()}_{entry.symbol}.md"
+    def _path_for(self, entry: PositionLogEntry, resolved: set[Path]) -> Path:
+        base = self._root / f"{entry.open_date.isoformat()}_{entry.symbol}.md"
+        if base not in resolved:
+            return base
+        # Genuine cross-id clash on (open_date, symbol) within one run — keep both
+        # logs by disambiguating the later one with its XTB position id.
+        return self._root / f"{entry.open_date.isoformat()}_{entry.symbol}_{entry.id}.md"
 
     def _write_new(self, path: Path, entry: PositionLogEntry) -> None:
         post = Post(_new_content(), self._handler, **_frontmatter(entry))
@@ -97,6 +104,7 @@ def _refreshed_metadata(entry: PositionLogEntry, existing: dict[str, object]) ->
 def _frontmatter(entry: PositionLogEntry) -> dict[str, object]:
     """Translate a typed entry into deterministically ordered YAML frontmatter."""
     metadata: dict[str, object] = {
+        "id": entry.id,
         "status": entry.status.value,
         "symbol": str(entry.symbol),
         "open_date": entry.open_date,
