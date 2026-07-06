@@ -122,4 +122,5 @@ markers = [
     "unit: pure domain or import-level tests with no filesystem or external I/O",
     "integration: adapter tests that exercise real filesystem or generated fixture files",
     "e2e: full CLI invocation tests with golden-file assertions",
+    "acceptance: opt-in checks against real, private XTB exports; skipped when none are present",
 ]
